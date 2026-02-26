@@ -1,0 +1,22 @@
+{{- if and .Values.monitoring.enabled .Values.monitoring.grafana.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboards
+  namespace: monitoring
+  labels:
+    {{- include "stock-platform.labels" . | nindent 4 }}
+data:
+  01_platform_overview.json: |
+    {{ .Files.Get "dashboards/01_platform_overview.json" | nindent 4 }}
+  02_kafka_monitoring.json: |
+    {{ .Files.Get "dashboards/02_kafka_monitoring.json" | nindent 4 }}
+  03_spark_streaming.json: |
+    {{ .Files.Get "dashboards/03_spark_streaming.json" | nindent 4 }}
+  04_ws_producer.json: |
+    {{ .Files.Get "dashboards/04_ws_producer.json" | nindent 4 }}
+  05_timescaledb.json: |
+    {{ .Files.Get "dashboards/05_timescaledb.json" | nindent 4 }}
+  06_alerting.json: |
+    {{ .Files.Get "dashboards/06_alerting.json" | nindent 4 }}
+{{- end }}

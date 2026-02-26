@@ -1,0 +1,38 @@
+{{- if .Values.kafka.enabled }}
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: stocks-aggregates-second
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: kafka-cluster
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  topicName: {{ .Values.kafka.topics.second.name }}
+  partitions: {{ .Values.kafka.topics.second.partitions }}
+  replicas: {{ .Values.kafka.topics.second.replicas }}
+  config:
+    retention.ms: {{ .Values.kafka.topics.second.retention }}
+    cleanup.policy: delete
+    segment.ms: 3600000
+    min.insync.replicas: 1
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaTopic
+metadata:
+  name: stocks-aggregates-minute
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: kafka-cluster
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  topicName: {{ .Values.kafka.topics.minute.name }}
+  partitions: {{ .Values.kafka.topics.minute.partitions }}
+  replicas: {{ .Values.kafka.topics.minute.replicas }}
+  config:
+    retention.ms: {{ .Values.kafka.topics.minute.retention }}
+    cleanup.policy: delete
+    segment.ms: 3600000
+    min.insync.replicas: 1
+{{- end }}

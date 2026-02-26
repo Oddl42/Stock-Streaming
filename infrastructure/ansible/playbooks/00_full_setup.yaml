@@ -1,0 +1,45 @@
+---
+# ============================================================
+# MASTER PLAYBOOK: Vollständiges Setup der Stock Platform
+# ============================================================
+# Verwendung:
+#   ansible-playbook playbooks/00_full_setup.yaml
+#   ansible-playbook playbooks/00_full_setup.yaml --tags "infra"
+#   ansible-playbook playbooks/00_full_setup.yaml --skip-tags "monitoring"
+# ============================================================
+
+- name: "Phase 1: System Prerequisites"
+  import_playbook: 01_prerequisites.yaml
+  tags: [prerequisites, system]
+
+- name: "Phase 2: MicroK8s Installation"
+  import_playbook: 02_microk8s.yaml
+  tags: [microk8s, k8s]
+
+- name: "Phase 3: Docker Installation"
+  import_playbook: 03_docker.yaml
+  tags: [docker]
+
+- name: "Phase 4: Cluster Initialization"
+  import_playbook: 04_cluster_init.yaml
+  tags: [cluster, k8s]
+
+- name: "Phase 5: Build Docker Images"
+  import_playbook: 05_build_images.yaml
+  tags: [build, images]
+
+- name: "Phase 6: Deploy Infrastructure (Kafka, TimescaleDB, Spark)"
+  import_playbook: 06_deploy_infra.yaml
+  tags: [infra, deploy]
+
+- name: "Phase 7: Deploy Application"
+  import_playbook: 07_deploy_app.yaml
+  tags: [app, deploy]
+
+- name: "Phase 8: Deploy Monitoring"
+  import_playbook: 08_deploy_monitoring.yaml
+  tags: [monitoring, deploy]
+
+- name: "Phase 9: Verification & Health Checks"
+  import_playbook: 09_verify.yaml
+  tags: [verify, health]

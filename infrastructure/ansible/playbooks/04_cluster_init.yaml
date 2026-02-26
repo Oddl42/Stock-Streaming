@@ -1,0 +1,399 @@
+---
+# ============================================================
+# Playbook 04: Kubernetes Cluster Initialisierung
+# ============================================================
+# Erstellt Namespaces, ServiceAccounts, Secrets, ConfigMaps,
+# ResourceQuotas, LimitRanges und RBAC-Konfigurationen.
+#
+# Verwendung:
+#   ansible-playbook playbooks/04_cluster_init.yaml
+#   ansible-playbook playbooks/04_cluster_init.yaml --tags "namespaces"
+#   ansible-playbook playbooks/04_cluster_init.yaml --tags "secrets"
+#   ansible-playbook playbooks/04_cluster_init.yaml --tags "rbac"
+# ============================================================
+
+- name: Initialize Kubernetes Cluster
+  hosts: k8s_nodes
+  become: true
+
+  pre_tasks:
+    - name: Verify MicroK8s is running
+      command: microk8s status --wait-ready
+      changed_when: false
+      timeout: 60
+      tags: [always]
+
+    - name: Verify kubectl access
+      command: microk8s kubectl cluster-info
+      register: cluster_info
+      changed_when: false
+      tags: [always]
+
+    - name: Display cluster info
+      debug:
+        msg: "{{ cluster_info.stdout_lines }}"
+      tags: [always]
+
+  roles:
+    - role: cluster_init
+      tags: [init]
+
+  tasks:
+    # ==========================================
+    # Namespaces erstellen
+    # ==========================================
+    - name: Create all required namespaces
+      shell: |
+        microk8s kubectl create namespace {{ item }} \
+          --dry-run=client -o yaml | microk8s kubectl apply -f -
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+        - monitoring
+        - spark
+      changed_when: false
+      tags: [namespaces]
+
+    - name: Label namespaces
+      command: >
+        microk8s kubectl label namespace {{ item.namespace }}
+        {{ item.label }} --overwrite
+      loop:
+        - { namespace: "{{ project_namespace }}", label: "app.kubernetes.io/part-of=stock-platform" }
+        - { namespace: "kafka", label: "app.kubernetes.io/part-of=stock-platform" }
+        - { namespace: "monitoring", label: "app.kubernetes.io/part-of=stock-platform" }
+      changed_when: false
+      tags: [namespaces]
+
+    # ==========================================
+    # RBAC: ServiceAccounts & Rollen
+    # ==========================================
+    - name: Create Spark ServiceAccount and ClusterRoleBinding
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        ---
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: spark
+          namespace: {{ project_namespace }}
+          labels:
+            app.kubernetes.io/component: spark
+            app.kubernetes.io/part-of: stock-platform
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: ClusterRoleBinding
+        metadata:
+          name: spark-cluster-role-binding
+        subjects:
+          - kind: ServiceAccount
+            name: spark
+            namespace: {{ project_namespace }}
+        roleRef:
+          kind: ClusterRole
+          name: edit
+          apiGroup: rbac.authorization.k8s.io
+        EOF
+      changed_when: false
+      tags: [rbac]
+
+    - name: Create App ServiceAccount
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        ---
+        apiVersion: v1
+        kind: ServiceAccount
+        metadata:
+          name: stock-platform-app
+          namespace: {{ project_namespace }}
+          labels:
+            app.kubernetes.io/component: app
+            app.kubernetes.io/part-of: stock-platform
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: Role
+        metadata:
+          name: stock-platform-app-role
+          namespace: {{ project_namespace }}
+        rules:
+          - apiGroups: [""]
+            resources: ["pods", "services", "configmaps", "secrets"]
+            verbs: ["get", "list", "watch"]
+          - apiGroups: ["apps"]
+            resources: ["deployments", "statefulsets"]
+            verbs: ["get", "list", "watch"]
+        ---
+        apiVersion: rbac.authorization.k8s.io/v1
+        kind: RoleBinding
+        metadata:
+          name: stock-platform-app-binding
+          namespace: {{ project_namespace }}
+        subjects:
+          - kind: ServiceAccount
+            name: stock-platform-app
+            namespace: {{ project_namespace }}
+        roleRef:
+          kind: Role
+          name: stock-platform-app-role
+          apiGroup: rbac.authorization.k8s.io
+        EOF
+      changed_when: false
+      tags: [rbac]
+
+    # ==========================================
+    # Secrets
+    # ==========================================
+    - name: Create application secrets
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: Secret
+        metadata:
+          name: stock-platform-secrets
+          namespace: {{ project_namespace }}
+          labels:
+            app.kubernetes.io/part-of: stock-platform
+        type: Opaque
+        stringData:
+          MASSIVE_API_KEY: "{{ app.massive_api_key }}"
+          DB_PASSWORD: "{{ timescaledb.password }}"
+          DB_USER: "{{ timescaledb.user }}"
+          DB_NAME: "{{ timescaledb.database }}"
+          GRAFANA_ADMIN_PASSWORD: "{{ monitoring.grafana.admin_password }}"
+        EOF
+      changed_when: false
+      no_log: true
+      tags: [secrets]
+
+    # ==========================================
+    # ConfigMaps
+    # ==========================================
+    - name: Create application ConfigMap
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: ConfigMap
+        metadata:
+          name: stock-platform-config
+          namespace: {{ project_namespace }}
+          labels:
+            app.kubernetes.io/part-of: stock-platform
+        data:
+          DB_HOST: "timescaledb-service.{{ project_namespace }}.svc.cluster.local"
+          DB_PORT: "{{ timescaledb.port | string }}"
+          DB_NAME: "{{ timescaledb.database }}"
+          KAFKA_BOOTSTRAP_SERVERS: "kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+          KAFKA_TOPIC_SECOND: "stocks.aggregates.second"
+          KAFKA_TOPIC_MINUTE: "stocks.aggregates.minute"
+          SPARK_MASTER: "spark://spark-master.{{ project_namespace }}.svc.cluster.local:7077"
+          PANEL_PORT: "{{ app.panel_port | string }}"
+          PANEL_ADDRESS: "0.0.0.0"
+          SPARK_CHECKPOINT_PATH: "/opt/spark-checkpoints"
+          SP500_CSV_PATH: "/app/data/sp500_tickers.csv"
+          CHART_UPDATE_INTERVAL_MS: "2000"
+          CHART_MAX_POINTS: "500"
+        EOF
+      changed_when: false
+      tags: [configmaps]
+
+    # ==========================================
+    # ResourceQuotas
+    # ==========================================
+    - name: Create ResourceQuotas
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: ResourceQuota
+        metadata:
+          name: {{ project_namespace }}-quota
+          namespace: {{ project_namespace }}
+          labels:
+            app.kubernetes.io/part-of: stock-platform
+        spec:
+          hard:
+            requests.cpu: "8"
+            requests.memory: "16Gi"
+            limits.cpu: "12"
+            limits.memory: "24Gi"
+            pods: "50"
+            persistentvolumeclaims: "10"
+            services: "20"
+        EOF
+      changed_when: false
+      tags: [quotas]
+
+    # ==========================================
+    # LimitRanges
+    # ==========================================
+    - name: Create LimitRanges
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        apiVersion: v1
+        kind: LimitRange
+        metadata:
+          name: {{ project_namespace }}-limits
+          namespace: {{ project_namespace }}
+          labels:
+            app.kubernetes.io/part-of: stock-platform
+        spec:
+          limits:
+            - default:
+                cpu: "500m"
+                memory: "512Mi"
+              defaultRequest:
+                cpu: "100m"
+                memory: "128Mi"
+              max:
+                cpu: "4"
+                memory: "8Gi"
+              min:
+                cpu: "50m"
+                memory: "64Mi"
+              type: Container
+        EOF
+      changed_when: false
+      tags: [quotas]
+
+    # ==========================================
+    # NetworkPolicies (Basis-Sicherheit)
+    # ==========================================
+    - name: Create NetworkPolicy - Allow internal traffic
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        apiVersion: networking.k8s.io/v1
+        kind: NetworkPolicy
+        metadata:
+          name: allow-internal
+          namespace: {{ project_namespace }}
+        spec:
+          podSelector: {}
+          policyTypes:
+            - Ingress
+            - Egress
+          ingress:
+            # Erlaube Traffic innerhalb des Namespace
+            - from:
+                - namespaceSelector:
+                    matchLabels:
+                      app.kubernetes.io/part-of: stock-platform
+            # Erlaube externen Traffic zur Panel GUI (NodePort)
+            - from: []
+              ports:
+                - protocol: TCP
+                  port: 5006
+          egress:
+            # Erlaube ausgehenden Traffic überall hin
+            # (Kafka in anderem Namespace, Massive.com WebSocket, etc.)
+            - to: []
+        EOF
+      changed_when: false
+      tags: [network]
+
+    # ==========================================
+    # PriorityClasses
+    # ==========================================
+    - name: Create PriorityClasses
+      shell: |
+        microk8s kubectl apply -f - <<'EOF'
+        ---
+        apiVersion: scheduling.k8s.io/v1
+        kind: PriorityClass
+        metadata:
+          name: stock-platform-critical
+        value: 1000000
+        globalDefault: false
+        description: "Critical components: DB, Kafka"
+        ---
+        apiVersion: scheduling.k8s.io/v1
+        kind: PriorityClass
+        metadata:
+          name: stock-platform-high
+        value: 500000
+        globalDefault: false
+        description: "High priority: Spark, Streaming Jobs"
+        ---
+        apiVersion: scheduling.k8s.io/v1
+        kind: PriorityClass
+        metadata:
+          name: stock-platform-normal
+        value: 100000
+        globalDefault: false
+        description: "Normal priority: GUI, Producer"
+        EOF
+      changed_when: false
+      tags: [priority]
+
+    # ==========================================
+    # Persistent Volume Directories (Host)
+    # ==========================================
+    - name: Create host directories for persistent volumes
+      file:
+        path: "{{ item }}"
+        state: directory
+        mode: '0777'
+        owner: root
+        group: root
+      loop:
+        - /opt/stock-platform/data/timescaledb
+        - /opt/stock-platform/data/kafka
+        - /opt/stock-platform/data/zookeeper
+        - /opt/stock-platform/data/spark-checkpoints
+        - /opt/stock-platform/data/prometheus
+        - /opt/stock-platform/data/grafana
+      tags: [storage]
+
+    # ==========================================
+    # Verifikation
+    # ==========================================
+    - name: Verify namespaces
+      command: microk8s kubectl get namespaces --no-headers
+      register: ns_verify
+      changed_when: false
+      tags: [verify]
+
+    - name: Verify secrets
+      command: "microk8s kubectl get secrets -n {{ project_namespace }} --no-headers"
+      register: secrets_verify
+      changed_when: false
+      tags: [verify]
+
+    - name: Verify configmaps
+      command: "microk8s kubectl get configmaps -n {{ project_namespace }} --no-headers"
+      register: cm_verify
+      changed_when: false
+      tags: [verify]
+
+    - name: Verify service accounts
+      command: "microk8s kubectl get serviceaccounts -n {{ project_namespace }} --no-headers"
+      register: sa_verify
+      changed_when: false
+      tags: [verify]
+
+    - name: Verify resource quotas
+      command: "microk8s kubectl describe resourcequota -n {{ project_namespace }}"
+      register: quota_verify
+      changed_when: false
+      tags: [verify]
+
+    - name: Cluster initialization summary
+      debug:
+        msg: |
+          ✅ Cluster Initialisierung abgeschlossen!
+
+          === Namespaces ===
+          {{ ns_verify.stdout }}
+
+          === Secrets ({{ project_namespace }}) ===
+          {{ secrets_verify.stdout }}
+
+          === ConfigMaps ({{ project_namespace }}) ===
+          {{ cm_verify.stdout }}
+
+          === ServiceAccounts ({{ project_namespace }}) ===
+          {{ sa_verify.stdout }}
+
+          === ResourceQuota ===
+          {{ quota_verify.stdout }}
+
+          Nächster Schritt: ansible-playbook playbooks/05_build_images.yaml
+      tags: [verify]

@@ -1,0 +1,148 @@
+---
+# ============================================================
+# Deploy Infrastructure: Kafka, TimescaleDB, Spark
+# ============================================================
+- name: Deploy Infrastructure Components
+  hosts: k8s_nodes
+  become: true
+  tasks:
+
+    # ==========================================
+    # 1. Strimzi Kafka Operator
+    # ==========================================
+    - name: Add Strimzi Helm repository
+      kubernetes.core.helm_repository:
+        name: strimzi
+        repo_url: "https://strimzi.io/charts/"
+      tags: [kafka]
+
+    - name: Install Strimzi Kafka Operator
+      kubernetes.core.helm:
+        name: strimzi-kafka-operator
+        chart_ref: strimzi/strimzi-kafka-operator
+        release_namespace: kafka
+        create_namespace: true
+        wait: true
+        wait_timeout: "5m"
+        values:
+          watchNamespaces:
+            - kafka
+      tags: [kafka]
+
+    - name: Wait for Strimzi Operator to be ready
+      command: >
+        microk8s kubectl wait --for=condition=Ready
+        pod -l name=strimzi-cluster-operator
+        -n kafka --timeout=120s
+      changed_when: false
+      tags: [kafka]
+
+    # ==========================================
+    # 2. Deploy via Helm Chart (Kafka Cluster + Topics)
+    # ==========================================
+    - name: Deploy Stock Platform Helm Chart - Kafka Resources
+      kubernetes.core.helm:
+        name: stock-platform-kafka
+        chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
+        release_namespace: "{{ project_namespace }}"
+        create_namespace: true
+        wait: true
+        wait_timeout: "10m"
+        values_files:
+          - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
+          - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"
+        set_values:
+          - value: "timescaledb.enabled=false"
+          - value: "spark.enabled=false"
+          - value: "app.wsProducer.enabled=false"
+          - value: "app.sparkJob.enabled=false"
+          - value: "app.panelGui.enabled=false"
+          - value: "monitoring.enabled=false"
+      tags: [kafka]
+
+    - name: Wait for Kafka Cluster to be ready
+      command: >
+        microk8s kubectl wait --for=condition=Ready
+        kafka/kafka-cluster -n kafka --timeout=300s
+      changed_when: false
+      retries: 3
+      delay: 30
+      tags: [kafka]
+
+    # ==========================================
+    # 3. TimescaleDB
+    # ==========================================
+    - name: Deploy Stock Platform Helm Chart - TimescaleDB
+      kubernetes.core.helm:
+        name: stock-platform-tsdb
+        chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
+        release_namespace: "{{ project_namespace }}"
+        wait: true
+        wait_timeout: "5m"
+        values_files:
+          - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
+          - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"
+        set_values:
+          - value: "kafka.enabled=false"
+          - value: "spark.enabled=false"
+          - value: "app.wsProducer.enabled=false"
+          - value: "app.sparkJob.enabled=false"
+          - value: "app.panelGui.enabled=false"
+          - value: "monitoring.enabled=false"
+      tags: [timescaledb]
+
+    - name: Wait for TimescaleDB to be ready
+      command: >
+        microk8s kubectl wait --for=condition=Ready
+        pod -l app=timescaledb
+        -n {{ project_namespace }} --timeout=180s
+      changed_when: false
+      tags: [timescaledb]
+
+    # ==========================================
+    # 4. Spark Master + Workers
+    # ==========================================
+    - name: Deploy Stock Platform Helm Chart - Spark
+      kubernetes.core.helm:
+        name: stock-platform-spark
+        chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
+        release_namespace: "{{ project_namespace }}"
+        wait: true
+        wait_timeout: "5m"
+        values_files:
+          - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
+          - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"
+        set_values:
+          - value: "kafka.enabled=false"
+          - value: "timescaledb.enabled=false"
+          - value: "app.wsProducer.enabled=false"
+          - value: "app.sparkJob.enabled=false"
+          - value: "app.panelGui.enabled=false"
+          - value: "monitoring.enabled=false"
+      tags: [spark]
+
+    - name: Wait for Spark Master to be ready
+      command: >
+        microk8s kubectl wait --for=condition=Ready
+        pod -l app=spark-master
+        -n {{ project_namespace }} --timeout=120s
+      changed_when: false
+      tags: [spark]
+
+    # ==========================================
+    # 5. Verify all infrastructure
+    # ==========================================
+    - name: Verify all infrastructure pods
+      command: "microk8s kubectl get pods -n {{ item }} -o wide"
+      loop:
+        - kafka
+        - "{{ project_namespace }}"
+      register: infra_pods
+      changed_when: false
+
+    - name: Display infrastructure pods
+      debug:
+        msg: "{{ item.stdout_lines }}"
+      loop: "{{ infra_pods.results }}"
+      loop_control:
+        label: "{{ item.item }}"

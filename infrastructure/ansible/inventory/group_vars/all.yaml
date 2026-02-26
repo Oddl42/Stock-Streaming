@@ -1,0 +1,113 @@
+---
+# ============================================================
+# Globale Variablen für alle Playbooks
+# ============================================================
+
+# --- Projekt ---
+project_name: "stock-platform"
+project_namespace: "stock-platform"
+project_base_dir: "{{ playbook_dir }}/../../.."
+infrastructure_dir: "{{ playbook_dir }}/.."
+
+# --- Versionen ---
+microk8s_channel: "1.28/stable"
+helm_version: "3.14"
+docker_version: "24.0"
+python_version: "3.11"
+
+# --- MicroK8s Addons ---
+microk8s_addons:
+  - dns
+  - storage
+  - ingress
+  - helm3
+  - metrics-server
+  - dashboard
+  - registry
+  - prometheus
+  - rbac
+
+# --- Docker Registry (MicroK8s built-in) ---
+docker_registry: "localhost:32000"
+image_tag: "latest"
+
+# --- Images ---
+images:
+  ws_producer:
+    name: "{{ docker_registry }}/stock-platform/ws-producer"
+    tag: "{{ image_tag }}"
+    dockerfile: "{{ infrastructure_dir }}/docker/Dockerfile.ws-producer"
+  spark_job:
+    name: "{{ docker_registry }}/stock-platform/spark-job"
+    tag: "{{ image_tag }}"
+    dockerfile: "{{ infrastructure_dir }}/docker/Dockerfile.spark-job"
+  panel_gui:
+    name: "{{ docker_registry }}/stock-platform/panel-gui"
+    tag: "{{ image_tag }}"
+    dockerfile: "{{ infrastructure_dir }}/docker/Dockerfile.panel-gui"
+
+# --- Kafka ---
+kafka:
+  replicas: 1
+  storage_size: "5Gi"
+  retention_hours: 48
+  num_partitions: 8
+  replication_factor: 1
+  topics:
+    - name: "stocks.aggregates.second"
+      partitions: 8
+      replication_factor: 1
+      retention_ms: 172800000   # 2 Tage
+    - name: "stocks.aggregates.minute"
+      partitions: 4
+      replication_factor: 1
+      retention_ms: 172800000
+
+# --- TimescaleDB ---
+timescaledb:
+  replicas: 1
+  storage_size: "10Gi"
+  database: "stock_streaming"
+  user: "postgres"
+  password: "stockplatform2024!"
+  port: 5432
+  retention_days: 2
+  max_connections: 100
+
+# --- Spark ---
+spark:
+  master:
+    replicas: 1
+    memory: "1g"
+    cpu: "500m"
+    ui_port: 8080
+  worker:
+    replicas: 2
+    memory: "2g"
+    cpu: "1000m"
+    cores: 2
+
+# --- App ---
+app:
+  massive_api_key: "{{ lookup('env', 'MASSIVE_API_KEY') | default('YOUR_API_KEY', true) }}"
+  panel_port: 5006
+  panel_replicas: 1
+  ws_producer_replicas: 1
+
+# --- Monitoring ---
+monitoring:
+  prometheus:
+    storage_size: "5Gi"
+    retention_days: 7
+    scrape_interval: "15s"
+  grafana:
+    admin_user: "admin"
+    admin_password: "grafana2024!"
+    port: 3000
+
+# --- Netzwerk ---
+network:
+  panel_nodeport: 30006
+  grafana_nodeport: 30003
+  spark_ui_nodeport: 30080
+  kafka_nodeport: 30092

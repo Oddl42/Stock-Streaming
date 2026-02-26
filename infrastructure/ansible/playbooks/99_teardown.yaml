@@ -1,0 +1,71 @@
+---
+# ============================================================
+# TEARDOWN: Alles abräumen
+# ============================================================
+- name: Teardown Stock Streaming Platform
+  hosts: k8s_nodes
+  become: true
+  vars_prompt:
+    - name: confirm_teardown
+      prompt: "⚠️  WARNUNG: Dies löscht ALLE Ressourcen! Eingabe 'YES' zum Bestätigen"
+      private: no
+  tasks:
+
+    - name: Verify confirmation
+      fail:
+        msg: "Teardown abgebrochen. Eingabe war nicht 'YES'."
+      when: confirm_teardown != "YES"
+
+    - name: Uninstall Helm releases
+      kubernetes.core.helm:
+        name: "{{ item }}"
+        state: absent
+        release_namespace: "{{ project_namespace }}"
+      loop:
+        - stock-platform-app
+        - stock-platform-monitoring
+        - stock-platform-spark
+        - stock-platform-tsdb
+        - stock-platform-kafka
+      ignore_errors: yes
+
+    - name: Uninstall Strimzi Operator
+      kubernetes.core.helm:
+        name: strimzi-kafka-operator
+        state: absent
+        release_namespace: kafka
+      ignore_errors: yes
+
+    - name: Delete namespaces
+      command: "microk8s kubectl delete namespace {{ item }} --ignore-not-found=true"
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+      changed_when: false
+
+    - name: Clean up PVCs
+      command: >
+        microk8s kubectl delete pvc --all -n {{ item }} --ignore-not-found=true
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+      changed_when: false
+
+    - name: Clean up local Docker images
+      docker_image:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ images.ws_producer.name }}:{{ images.ws_producer.tag }}"
+        - "{{ images.spark_job.name }}:{{ images.spark_job.tag }}"
+        - "{{ images.panel_gui.name }}:{{ images.panel_gui.tag }}"
+      ignore_errors: yes
+
+    - name: Clean up Spark checkpoints
+      file:
+        path: /tmp/spark-checkpoints
+        state: absent
+
+    - name: Teardown complete
+      debug:
+        msg: "🗑️  Teardown complete. Alle Ressourcen wurden entfernt."

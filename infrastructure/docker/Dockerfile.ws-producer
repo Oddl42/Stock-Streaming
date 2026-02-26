@@ -1,0 +1,47 @@
+# ============================================================
+# WebSocket Producer: Massive.com → Kafka
+# ============================================================
+FROM python:3.11-slim
+
+LABEL maintainer="stock-platform"
+LABEL component="ws-producer"
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    librdkafka-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+COPY environment.yaml .
+RUN pip install --no-cache-dir \
+    websockets==12.0 \
+    websocket-client==1.7.0 \
+    confluent-kafka==2.3.0 \
+    aiohttp==3.9.0 \
+    python-dotenv==1.0.0 \
+    pyyaml==6.0.1 \
+    prometheus-client==0.19.0 \
+    psycopg2-binary==2.9.9
+
+# Application code
+COPY config/ ./config/
+COPY backend/websocket_producer/ ./backend/websocket_producer/
+COPY backend/__init__.py ./backend/
+COPY data/ ./data/
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
+    CMD python -c "import socket; s=socket.socket(); s.connect(('localhost', 8092)); s.close()" || exit 1
+
+# Environment
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+
+# Metrics port
+EXPOSE 8092
+
+CMD ["python", "-m", "backend.websocket_producer.ws_client"]

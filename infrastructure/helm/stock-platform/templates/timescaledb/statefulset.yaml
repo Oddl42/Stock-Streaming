@@ -1,0 +1,125 @@
+{{- if .Values.timescaledb.enabled }}
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: timescaledb
+  namespace: {{ include "stock-platform.namespace" . }}
+  labels:
+    app: timescaledb
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  serviceName: timescaledb
+  replicas: {{ .Values.timescaledb.replicas }}
+  selector:
+    matchLabels:
+      app: timescaledb
+  template:
+    metadata:
+      labels:
+        app: timescaledb
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "9187"
+    spec:
+      containers:
+        - name: timescaledb
+          image: "{{ .Values.timescaledb.image.repository }}:{{ .Values.timescaledb.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 5432
+              name: postgresql
+              protocol: TCP
+          env:
+            - name: POSTGRES_DB
+              value: {{ .Values.timescaledb.database }}
+            - name: POSTGRES_USER
+              value: {{ .Values.timescaledb.user }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: stock-platform-secrets
+                  key: DB_PASSWORD
+            - name: PGDATA
+              value: /var/lib/postgresql/data/pgdata
+          args:
+            - "-c"
+            - "max_connections={{ .Values.timescaledb.config.maxConnections }}"
+            - "-c"
+            - "shared_buffers={{ .Values.timescaledb.config.sharedBuffers }}"
+            - "-c"
+            - "effective_cache_size={{ .Values.timescaledb.config.effectiveCacheSize }}"
+            - "-c"
+            - "work_mem={{ .Values.timescaledb.config.workMem }}"
+            - "-c"
+            - "log_statement=none"
+            - "-c"
+            - "log_min_duration_statement=1000"
+          resources:
+            requests:
+              memory: {{ .Values.timescaledb.resources.requests.memory }}
+              cpu: {{ .Values.timescaledb.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.timescaledb.resources.limits.memory }}
+              cpu: {{ .Values.timescaledb.resources.limits.cpu }}
+          volumeMounts:
+            - name: timescaledb-data
+              mountPath: /var/lib/postgresql/data
+            - name: init-scripts
+              mountPath: /docker-entrypoint-initdb.d
+          livenessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.timescaledb.user }}
+                - -d
+                - {{ .Values.timescaledb.database }}
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+          readinessProbe:
+            exec:
+              command:
+                - pg_isready
+                - -U
+                - {{ .Values.timescaledb.user }}
+                - -d
+                - {{ .Values.timescaledb.database }}
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            timeoutSeconds: 3
+            failureThreshold: 3
+
+        # PostgreSQL Exporter Sidecar (Prometheus)
+        - name: postgres-exporter
+          image: prometheuscommunity/postgres-exporter:v0.15.0
+          ports:
+            - containerPort: 9187
+              name: metrics
+          env:
+            - name: DATA_SOURCE_NAME
+              value: "postgresql://{{ .Values.timescaledb.user }}:{{ .Values.timescaledb.password }}@localhost:5432/{{ .Values.timescaledb.database }}?sslmode=disable"
+          resources:
+            requests:
+              memory: "64Mi"
+              cpu: "50m"
+            limits:
+              memory: "128Mi"
+              cpu: "100m"
+
+      volumes:
+        - name: init-scripts
+          configMap:
+            name: timescaledb-init-scripts
+
+  volumeClaimTemplates:
+    - metadata:
+        name: timescaledb-data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        storageClassName: {{ .Values.timescaledb.storage.class }}
+        resources:
+          requests:
+            storage: {{ .Values.timescaledb.storage.size }}
+{{- end }}

@@ -1,0 +1,63 @@
+# ============================================================
+# Spark Streaming Job: Kafka → TimescaleDB
+# ============================================================
+FROM bitnami/spark:3.5.0
+
+LABEL maintainer="stock-platform"
+LABEL component="spark-job"
+
+USER root
+
+# System dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    python3-pip \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies
+RUN pip3 install --no-cache-dir \
+    psycopg2-binary==2.9.9 \
+    python-dotenv==1.0.0 \
+    pyyaml==6.0.1 \
+    prometheus-client==0.19.0 \
+    py4j==0.10.9.7
+
+# Download Spark packages (Kafka + PostgreSQL JDBC)
+RUN mkdir -p /opt/bitnami/spark/jars && \
+    curl -L -o /opt/bitnami/spark/jars/spark-sql-kafka-0-10_2.12-3.5.0.jar \
+    https://repo1.maven.org/maven2/org/apache/spark/spark-sql-kafka-0-10_2.12/3.5.0/spark-sql-kafka-0-10_2.12-3.5.0.jar && \
+    curl -L -o /opt/bitnami/spark/jars/kafka-clients-3.5.0.jar \
+    https://repo1.maven.org/maven2/org/apache/kafka/kafka-clients/3.5.0/kafka-clients-3.5.0.jar && \
+    curl -L -o /opt/bitnami/spark/jars/spark-token-provider-kafka-0-10_2.12-3.5.0.jar \
+    https://repo1.maven.org/maven2/org/apache/spark/spark-token-provider-kafka-0-10_2.12/3.5.0/spark-token-provider-kafka-0-10_2.12-3.5.0.jar && \
+    curl -L -o /opt/bitnami/spark/jars/commons-pool2-2.11.1.jar \
+    https://repo1.maven.org/maven2/org/apache/commons/commons-pool2/2.11.1/commons-pool2-2.11.1.jar && \
+    curl -L -o /opt/bitnami/spark/jars/postgresql-42.7.1.jar \
+    https://repo1.maven.org/maven2/org/postgresql/postgresql/42.7.1/postgresql-42.7.1.jar
+
+WORKDIR /app
+
+# Application code
+COPY config/ ./config/
+COPY backend/spark_streaming/ ./backend/spark_streaming/
+COPY backend/database/ ./backend/database/
+COPY backend/__init__.py ./backend/
+
+# Checkpoint directory
+RUN mkdir -p /opt/spark-checkpoints && chmod 777 /opt/spark-checkpoints
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONPATH=/app
+ENV SPARK_HOME=/opt/bitnami/spark
+
+# Metrics port
+EXPOSE 8090
+EXPOSE 8091
+
+# Spark UI
+EXPOSE 4040
+
+USER 1001
+
+ENTRYPOINT ["python3", "-m", "backend.spark_streaming.entrypoint"]
+CMD ["--job", "second"]

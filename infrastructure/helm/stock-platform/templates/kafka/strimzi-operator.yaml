@@ -1,0 +1,74 @@
+{{- if .Values.kafka.enabled }}
+# Strimzi Kafka Operator wird via Helm Dependency installiert
+# Dieses Template erstellt den Kafka Cluster
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: Kafka
+metadata:
+  name: kafka-cluster
+  namespace: kafka
+  labels:
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  kafka:
+    version: {{ .Values.kafka.version }}
+    replicas: {{ .Values.kafka.replicas }}
+    listeners:
+      - name: plain
+        port: 9092
+        type: internal
+        tls: false
+      - name: external
+        port: 9094
+        type: nodeport
+        tls: false
+        configuration:
+          bootstrap:
+            nodePort: 30092
+    config:
+      offsets.topic.replication.factor: {{ .Values.kafka.config.offsetsTopicReplicationFactor }}
+      transaction.state.log.replication.factor: {{ .Values.kafka.config.transactionStateLogReplicationFactor }}
+      transaction.state.log.min.isr: {{ .Values.kafka.config.transactionStateLogMinIsr }}
+      default.replication.factor: {{ .Values.kafka.config.defaultReplicationFactor }}
+      min.insync.replicas: {{ .Values.kafka.config.minInsyncReplicas }}
+      log.retention.hours: {{ .Values.kafka.config.logRetentionHours }}
+      auto.create.topics.enable: false
+      log.message.format.version: "3.6"
+      inter.broker.protocol.version: "3.6"
+      num.partitions: 8
+    storage:
+      type: persistent-claim
+      size: {{ .Values.kafka.storage.size }}
+      class: {{ .Values.kafka.storage.class }}
+      deleteClaim: false
+    resources:
+      requests:
+        memory: {{ .Values.kafka.resources.requests.memory }}
+        cpu: {{ .Values.kafka.resources.requests.cpu }}
+      limits:
+        memory: {{ .Values.kafka.resources.limits.memory }}
+        cpu: {{ .Values.kafka.resources.limits.cpu }}
+    metricsConfig:
+      type: jmxPrometheusExporter
+      valueFrom:
+        configMapKeyRef:
+          name: kafka-metrics-config
+          key: kafka-metrics-config.yml
+  zookeeper:
+    replicas: {{ .Values.kafka.zookeeper.replicas }}
+    storage:
+      type: persistent-claim
+      size: {{ .Values.kafka.zookeeper.storage.size }}
+      class: {{ .Values.kafka.zookeeper.storage.class }}
+      deleteClaim: false
+    resources:
+      requests:
+        memory: {{ .Values.kafka.zookeeper.resources.requests.memory }}
+        cpu: {{ .Values.kafka.zookeeper.resources.requests.cpu }}
+      limits:
+        memory: {{ .Values.kafka.zookeeper.resources.limits.memory }}
+        cpu: {{ .Values.kafka.zookeeper.resources.limits.cpu }}
+  entityOperator:
+    topicOperator: {}
+    userOperator: {}
+{{- end }}

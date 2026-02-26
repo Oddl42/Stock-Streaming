@@ -1,0 +1,140 @@
+---
+# ============================================================
+# Kubernetes Cluster Initialisierung
+# ============================================================
+
+- name: Create project namespace
+  shell: |
+    microk8s kubectl create namespace {{ project_namespace }} --dry-run=client -o yaml | microk8s kubectl apply -f -
+  become: true
+  changed_when: false
+
+- name: Create monitoring namespace
+  shell: |
+    microk8s kubectl create namespace monitoring --dry-run=client -o yaml | microk8s kubectl apply -f -
+  become: true
+  changed_when: false
+
+- name: Create kafka namespace
+  shell: |
+    microk8s kubectl create namespace kafka --dry-run=client -o yaml | microk8s kubectl apply -f -
+  become: true
+  changed_when: false
+
+- name: Create Spark ServiceAccount
+  shell: |
+    microk8s kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: ServiceAccount
+    metadata:
+      name: spark
+      namespace: {{ project_namespace }}
+    ---
+    apiVersion: rbac.authorization.k8s.io/v1
+    kind: ClusterRoleBinding
+    metadata:
+      name: spark-role-binding
+    subjects:
+      - kind: ServiceAccount
+        name: spark
+        namespace: {{ project_namespace }}
+    roleRef:
+      kind: ClusterRole
+      name: edit
+      apiGroup: rbac.authorization.k8s.io
+    EOF
+  become: true
+  changed_when: false
+
+- name: Create ResourceQuotas for namespace
+  shell: |
+    microk8s kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: ResourceQuota
+    metadata:
+      name: {{ project_namespace }}-quota
+      namespace: {{ project_namespace }}
+    spec:
+      hard:
+        requests.cpu: "8"
+        requests.memory: "16Gi"
+        limits.cpu: "12"
+        limits.memory: "24Gi"
+        pods: "50"
+        persistentvolumeclaims: "10"
+    EOF
+  become: true
+  changed_when: false
+
+- name: Create LimitRange for namespace
+  shell: |
+    microk8s kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: LimitRange
+    metadata:
+      name: {{ project_namespace }}-limits
+      namespace: {{ project_namespace }}
+    spec:
+      limits:
+        - default:
+            cpu: "500m"
+            memory: "512Mi"
+          defaultRequest:
+            cpu: "100m"
+            memory: "128Mi"
+          type: Container
+    EOF
+  become: true
+  changed_when: false
+
+- name: Create application secrets
+  shell: |
+    microk8s kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: Secret
+    metadata:
+      name: stock-platform-secrets
+      namespace: {{ project_namespace }}
+    type: Opaque
+    stringData:
+      MASSIVE_API_KEY: "{{ app.massive_api_key }}"
+      DB_PASSWORD: "{{ timescaledb.password }}"
+      DB_USER: "{{ timescaledb.user }}"
+      DB_NAME: "{{ timescaledb.database }}"
+      GRAFANA_ADMIN_PASSWORD: "{{ monitoring.grafana.admin_password }}"
+    EOF
+  become: true
+  changed_when: false
+
+- name: Create application ConfigMap
+  shell: |
+    microk8s kubectl apply -f - <<EOF
+    apiVersion: v1
+    kind: ConfigMap
+    metadata:
+      name: stock-platform-config
+      namespace: {{ project_namespace }}
+    data:
+      DB_HOST: "timescaledb-service.{{ project_namespace }}.svc.cluster.local"
+      DB_PORT: "{{ timescaledb.port | string }}"
+      DB_NAME: "{{ timescaledb.database }}"
+      KAFKA_BOOTSTRAP_SERVERS: "kafka-cluster-kafka-bootstrap.kafka.svc.cluster.local:9092"
+      KAFKA_TOPIC_SECOND: "stocks.aggregates.second"
+      KAFKA_TOPIC_MINUTE: "stocks.aggregates.minute"
+      SPARK_MASTER: "spark://spark-master.{{ project_namespace }}.svc.cluster.local:7077"
+      PANEL_PORT: "{{ app.panel_port | string }}"
+      PANEL_ADDRESS: "0.0.0.0"
+      SPARK_CHECKPOINT_PATH: "/opt/spark-checkpoints"
+    EOF
+  become: true
+  changed_when: false
+
+- name: Verify namespace creation
+  command: "microk8s kubectl get namespaces"
+  register: ns_output
+  changed_when: false
+  become: true
+
+- name: Display namespaces
+  debug:
+    msg: "{{ ns_output.stdout_lines }}"

@@ -1,0 +1,274 @@
+---
+# ============================================================
+# Playbook 05: Docker Images bauen & in MicroK8s Registry pushen
+# ============================================================
+# Baut alle drei Docker Images (ws-producer, spark-job, panel-gui)
+# und pusht sie in die MicroK8s Built-in Registry (localhost:32000).
+#
+# Verwendung:
+#   ansible-playbook playbooks/05_build_images.yaml
+#   ansible-playbook playbooks/05_build_images.yaml --tags "ws-producer"
+#   ansible-playbook playbooks/05_build_images.yaml --tags "spark-job"
+#   ansible-playbook playbooks/05_build_images.yaml --tags "panel-gui"
+#   ansible-playbook playbooks/05_build_images.yaml -e "image_tag=v1.0.0"
+# ============================================================
+
+- name: Build and Push Docker Images
+  hosts: k8s_nodes
+  become: true
+
+  vars:
+    build_context: "{{ project_base_dir }}"
+    force_rebuild: false
+
+  pre_tasks:
+    # ==========================================
+    # Voraussetzungen prüfen
+    # ==========================================
+    - name: Verify Docker is running
+      command: docker info
+      register: docker_info
+      changed_when: false
+      failed_when: docker_info.rc != 0
+      tags: [always]
+
+    - name: Verify MicroK8s registry is enabled
+      command: microk8s status --addon registry
+      register: registry_status
+      changed_when: false
+      tags: [always]
+
+    - name: Check if MicroK8s registry is accessible
+      uri:
+        url: "http://localhost:32000/v2/_catalog"
+        return_content: yes
+        timeout: 10
+      register: registry_check
+      retries: 3
+      delay: 5
+      tags: [always]
+
+    - name: Display current registry contents
+      debug:
+        msg: "Current registry: {{ registry_check.json }}"
+      tags: [always]
+
+    - name: Verify build context exists
+      stat:
+        path: "{{ build_context }}"
+      register: context_check
+      tags: [always]
+
+    - name: Fail if build context not found
+      fail:
+        msg: |
+          Build context nicht gefunden: {{ build_context }}
+          Bitte stelle sicher, dass das Projektverzeichnis existiert.
+      when: not context_check.stat.exists
+      tags: [always]
+
+    - name: Verify Dockerfiles exist
+      stat:
+        path: "{{ item.dockerfile }}"
+      loop:
+        - "{{ images.ws_producer }}"
+        - "{{ images.spark_job }}"
+        - "{{ images.panel_gui }}"
+      register: dockerfile_checks
+      tags: [always]
+
+    - name: Warn about missing Dockerfiles
+      debug:
+        msg: "⚠️  Dockerfile nicht gefunden: {{ item.item.dockerfile }}"
+      loop: "{{ dockerfile_checks.results }}"
+      when: not item.stat.exists
+      loop_control:
+        label: "{{ item.item.dockerfile }}"
+      tags: [always]
+
+  tasks:
+    # ==========================================
+    # 1. WebSocket Producer Image
+    # ==========================================
+    - name: "[WS-Producer] Build Docker image"
+      community.docker.docker_image:
+        name: "{{ images.ws_producer.name }}"
+        tag: "{{ images.ws_producer.tag }}"
+        source: build
+        build:
+          path: "{{ build_context }}"
+          dockerfile: "{{ images.ws_producer.dockerfile }}"
+          pull: yes
+          nocache: "{{ force_rebuild | bool }}"
+        force_source: "{{ force_rebuild | bool }}"
+      register: ws_build
+      tags: [ws-producer, build]
+
+    - name: "[WS-Producer] Tag image for registry"
+      community.docker.docker_image:
+        name: "{{ images.ws_producer.name }}"
+        tag: "{{ images.ws_producer.tag }}"
+        repository: "{{ images.ws_producer.name }}"
+        push: no
+        source: local
+      tags: [ws-producer, build]
+
+    - name: "[WS-Producer] Push to MicroK8s registry"
+      community.docker.docker_image:
+        name: "{{ images.ws_producer.name }}"
+        tag: "{{ images.ws_producer.tag }}"
+        push: yes
+        source: local
+      register: ws_push
+      tags: [ws-producer, push]
+
+    - name: "[WS-Producer] Display build result"
+      debug:
+        msg: "WS-Producer Image: {{ 'Built & Pushed ✅' if ws_push is succeeded else 'FAILED ❌' }}"
+      tags: [ws-producer]
+
+    # ==========================================
+    # 2. Spark Job Image
+    # ==========================================
+    - name: "[Spark-Job] Build Docker image"
+      community.docker.docker_image:
+        name: "{{ images.spark_job.name }}"
+        tag: "{{ images.spark_job.tag }}"
+        source: build
+        build:
+          path: "{{ build_context }}"
+          dockerfile: "{{ images.spark_job.dockerfile }}"
+          pull: yes
+          nocache: "{{ force_rebuild | bool }}"
+        force_source: "{{ force_rebuild | bool }}"
+      register: spark_build
+      tags: [spark-job, build]
+
+    - name: "[Spark-Job] Push to MicroK8s registry"
+      community.docker.docker_image:
+        name: "{{ images.spark_job.name }}"
+        tag: "{{ images.spark_job.tag }}"
+        push: yes
+        source: local
+      register: spark_push
+      tags: [spark-job, push]
+
+    - name: "[Spark-Job] Display build result"
+      debug:
+        msg: "Spark-Job Image: {{ 'Built & Pushed ✅' if spark_push is succeeded else 'FAILED ❌' }}"
+      tags: [spark-job]
+
+    # ==========================================
+    # 3. Panel GUI Image
+    # ==========================================
+    - name: "[Panel-GUI] Build Docker image"
+      community.docker.docker_image:
+        name: "{{ images.panel_gui.name }}"
+        tag: "{{ images.panel_gui.tag }}"
+        source: build
+        build:
+          path: "{{ build_context }}"
+          dockerfile: "{{ images.panel_gui.dockerfile }}"
+          pull: yes
+          nocache: "{{ force_rebuild | bool }}"
+        force_source: "{{ force_rebuild | bool }}"
+      register: panel_build
+      tags: [panel-gui, build]
+
+    - name: "[Panel-GUI] Push to MicroK8s registry"
+      community.docker.docker_image:
+        name: "{{ images.panel_gui.name }}"
+        tag: "{{ images.panel_gui.tag }}"
+        push: yes
+        source: local
+      register: panel_push
+      tags: [panel-gui, push]
+
+    - name: "[Panel-GUI] Display build result"
+      debug:
+        msg: "Panel-GUI Image: {{ 'Built & Pushed ✅' if panel_push is succeeded else 'FAILED ❌' }}"
+      tags: [panel-gui]
+
+  post_tasks:
+    # ==========================================
+    # Verifikation
+    # ==========================================
+    - name: Verify all images in registry
+      uri:
+        url: "http://localhost:32000/v2/_catalog"
+        return_content: yes
+      register: final_catalog
+      tags: [verify]
+
+    - name: Check image tags in registry
+      uri:
+        url: "http://localhost:32000/v2/{{ item }}/tags/list"
+        return_content: yes
+      loop:
+        - "stock-platform/ws-producer"
+        - "stock-platform/spark-job"
+        - "stock-platform/panel-gui"
+      register: image_tags
+      ignore_errors: yes
+      tags: [verify]
+
+    - name: Display image tag details
+      debug:
+        msg: "{{ item.json | default('Not found') }}"
+      loop: "{{ image_tags.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+      tags: [verify]
+
+    - name: List local Docker images
+      command: >
+        docker images --format "table {{ '{{' }}.Repository{{ '}}' }}\t{{ '{{' }}.Tag{{ '}}' }}\t{{ '{{' }}.Size{{ '}}' }}\t{{ '{{' }}.CreatedSince{{ '}}' }}"
+        --filter "reference=localhost:32000/stock-platform/*"
+      register: local_images
+      changed_when: false
+      tags: [verify]
+
+    - name: Display local images
+      debug:
+        msg: "{{ local_images.stdout_lines }}"
+      tags: [verify]
+
+    # ==========================================
+    # Cleanup alter Images (optional)
+    # ==========================================
+    - name: Remove dangling Docker images
+      command: docker image prune -f
+      register: prune_result
+      changed_when: "'Total reclaimed space: 0B' not in prune_result.stdout"
+      tags: [cleanup]
+
+    - name: Display cleanup result
+      debug:
+        msg: "{{ prune_result.stdout_lines }}"
+      when: prune_result.changed
+      tags: [cleanup]
+
+    # ==========================================
+    # Zusammenfassung
+    # ==========================================
+    - name: Build summary
+      debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════╗
+          ║         📦 Docker Image Build - Zusammenfassung         ║
+          ╠══════════════════════════════════════════════════════════╣
+          ║                                                        ║
+          ║  WS-Producer:  {{ 'Built & Pushed ✅' if ws_push is succeeded else 'FAILED ❌         ' }}                    ║
+          ║  Spark-Job:    {{ 'Built & Pushed ✅' if spark_push is succeeded else 'FAILED ❌         ' }}                    ║
+          ║  Panel-GUI:    {{ 'Built & Pushed ✅' if panel_push is succeeded else 'FAILED ❌         ' }}                    ║
+          ║                                                        ║
+          ║  Registry:     localhost:32000                          ║
+          ║  Tag:          {{ image_tag }}                                ║
+          ║                                                        ║
+          ╠══════════════════════════════════════════════════════════╣
+          ║  Registry Catalog:                                     ║
+          ║  {{ final_catalog.json.repositories | default([]) | join(', ') }}
+          ╚══════════════════════════════════════════════════════════╝
+
+          Nächster Schritt: ansible-playbook playbooks/06_deploy_infra.yaml
+      tags: [verify]

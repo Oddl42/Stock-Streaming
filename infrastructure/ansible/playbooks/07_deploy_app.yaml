@@ -1,0 +1,42 @@
+---
+# ============================================================
+# Deploy Application Components
+# ============================================================
+- name: Deploy Application
+  hosts: k8s_nodes
+  become: true
+  tasks:
+
+    - name: Deploy Stock Platform Helm Chart - Application
+      kubernetes.core.helm:
+        name: stock-platform-app
+        chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
+        release_namespace: "{{ project_namespace }}"
+        wait: true
+        wait_timeout: "5m"
+        values_files:
+          - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
+          - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"
+        set_values:
+          - value: "kafka.enabled=false"
+          - value: "timescaledb.enabled=false"
+          - value: "spark.enabled=false"
+          - value: "monitoring.enabled=false"
+      tags: [app]
+
+    - name: Wait for Panel GUI to be ready
+      command: >
+        microk8s kubectl wait --for=condition=Ready
+        pod -l app=panel-gui
+        -n {{ project_namespace }} --timeout=120s
+      changed_when: false
+      tags: [app]
+
+    - name: Display application access information
+      debug:
+        msg: |
+          ✅ Application deployed!
+          
+          🖥️  Panel GUI:    http://localhost:{{ network.panel_nodeport }}/app
+          ⚡ Spark UI:     http://localhost:{{ network.spark_ui_nodeport }}
+          📊 Grafana:      http://localhost:{{ network.grafana_nodeport }}

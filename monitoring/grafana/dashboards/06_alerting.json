@@ -1,0 +1,93 @@
+{
+  "description": "Alert-Übersicht und Incident-Tracking",
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 600,
+      "title": "🚨 Active Alerts",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 1 },
+      "id": 601,
+      "title": "Current Alerts",
+      "type": "alertlist",
+      "options": {
+        "showOptions": "current",
+        "maxItems": 20,
+        "sortOrder": 1,
+        "stateFilter": {
+          "firing": true,
+          "pending": true,
+          "noData": true,
+          "normal": false,
+          "error": true
+        },
+        "alertInstanceLabelFilter": ""
+      }
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 7 },
+      "id": 610,
+      "title": "📊 Alert History",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 80 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "id": 611,
+      "title": "Firing Alerts Over Time",
+      "type": "timeseries",
+      "targets": [
+        { "expr": "ALERTS{alertstate=\"firing\"}", "legendFormat": "{{alertname}}" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "id": 612,
+      "title": "Error Rate Trends (for Alerting)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(ws_producer_kafka_produce_errors_total[5m])",
+          "legendFormat": "Kafka Produce Errors"
+        },
+        {
+          "expr": "rate(spark_streaming_write_errors_total[5m])",
+          "legendFormat": "Spark Write Errors"
+        },
+        {
+          "expr": "rate(ws_producer_reconnections_total[5m])",
+          "legendFormat": "WS Reconnections"
+        }
+      ]
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["stock-platform", "alerting"],
+  "time": { "from": "now-6h", "to": "now" },
+  "title": "🚨 Alerting Overview",
+  "uid": "alerting-overview",
+  "version": 1
+}

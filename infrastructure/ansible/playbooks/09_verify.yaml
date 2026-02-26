@@ -1,0 +1,117 @@
+---
+# ============================================================
+# Verifikation & Health Checks
+# ============================================================
+- name: Verify Complete Deployment
+  hosts: k8s_nodes
+  become: true
+  tasks:
+
+    - name: Check all namespaces
+      command: microk8s kubectl get namespaces
+      register: namespaces
+      changed_when: false
+
+    - name: Display namespaces
+      debug:
+        msg: "{{ namespaces.stdout_lines }}"
+
+    - name: Check all pods across namespaces
+      command: "microk8s kubectl get pods -n {{ item }} -o wide --no-headers"
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+        - monitoring
+      register: all_pods
+      changed_when: false
+
+    - name: Display pod status
+      debug:
+        msg: |
+          === {{ item.item }} ===
+          {{ item.stdout }}
+      loop: "{{ all_pods.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Check for non-running pods
+      shell: >
+        microk8s kubectl get pods -A --no-headers |
+        grep -v "Running\|Completed" || echo "ALL_PODS_OK"
+      register: bad_pods
+      changed_when: false
+
+    - name: Alert if non-running pods found
+      debug:
+        msg: "{{ bad_pods.stdout_lines }}"
+      when: "'ALL_PODS_OK' not in bad_pods.stdout"
+
+    - name: Verify Kafka connectivity
+      command: >
+        microk8s kubectl exec -n kafka kafka-cluster-kafka-0 --
+        bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+      register: kafka_topics
+      changed_when: false
+
+    - name: Display Kafka topics
+      debug:
+        msg: "Kafka Topics: {{ kafka_topics.stdout_lines }}"
+
+    - name: Verify TimescaleDB connectivity
+      command: >
+        microk8s kubectl exec -n {{ project_namespace }}
+        $(microk8s kubectl get pods -n {{ project_namespace }} -l app=timescaledb -o jsonpath='{.items[0].metadata.name}')
+        -- psql -U {{ timescaledb.user }} -d {{ timescaledb.database }} -c "SELECT count(*) FROM timescaledb_information.hypertables;"
+      register: tsdb_check
+      changed_when: false
+
+    - name: Display TimescaleDB hypertables
+      debug:
+        msg: "{{ tsdb_check.stdout_lines }}"
+
+    - name: Check all services
+      command: "microk8s kubectl get svc -n {{ item }}"
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+        - monitoring
+      register: all_services
+      changed_when: false
+
+    - name: Display services
+      debug:
+        msg: |
+          === {{ item.item }} ===
+          {{ item.stdout }}
+      loop: "{{ all_services.results }}"
+      loop_control:
+        label: "{{ item.item }}"
+
+    - name: Test Panel GUI accessibility
+      uri:
+        url: "http://localhost:{{ network.panel_nodeport }}/app"
+        return_content: no
+        status_code: 200
+      register: panel_check
+      retries: 3
+      delay: 10
+      ignore_errors: yes
+
+    - name: Final deployment summary
+      debug:
+        msg: |
+          ╔══════════════════════════════════════════════════════════════╗
+          ║           🚀 STOCK STREAMING PLATFORM - DEPLOYED           ║
+          ╠══════════════════════════════════════════════════════════════╣
+          ║                                                            ║
+          ║  🖥️  Panel GUI:     http://localhost:{{ network.panel_nodeport }}/app           ║
+          ║  ⚡ Spark UI:      http://localhost:{{ network.spark_ui_nodeport }}              ║
+          ║  📊 Grafana:       http://localhost:{{ network.grafana_nodeport }}              ║
+          ║  🔗 Kafka (ext):   localhost:{{ network.kafka_nodeport }}                    ║
+          ║                                                            ║
+          ║  Panel GUI Status: {{ 'OK ✅' if panel_check is succeeded else 'FAILED ❌' }}                              ║
+          ║                                                            ║
+          ╠══════════════════════════════════════════════════════════════╣
+          ║  Namespaces: {{ project_namespace }}, kafka, monitoring          ║
+          ║  Cluster:    microk8s ({{ microk8s_channel }})                    ║
+          ╚══════════════════════════════════════════════════════════════╝

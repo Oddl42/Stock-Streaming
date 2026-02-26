@@ -1,0 +1,144 @@
+---
+# ============================================================
+# Systemvoraussetzungen installieren
+# ============================================================
+
+- name: Update apt cache
+  apt:
+    update_cache: yes
+    cache_valid_time: 3600
+
+- name: Install required system packages
+  apt:
+    name:
+      # Grundpakete
+      - apt-transport-https
+      - ca-certificates
+      - curl
+      - wget
+      - gnupg
+      - lsb-release
+      - software-properties-common
+      # Build-Tools
+      - build-essential
+      - gcc
+      - g++
+      - make
+      # Python
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      # Java (für Spark)
+      - openjdk-11-jdk
+      - openjdk-11-jre
+      # Netzwerk
+      - net-tools
+      - iptables
+      - ipvsadm
+      # Monitoring
+      - htop
+      - iotop
+      - sysstat
+      # Sonstige
+      - jq
+      - unzip
+      - git
+    state: present
+  become: true
+
+- name: Set JAVA_HOME
+  lineinfile:
+    path: /etc/environment
+    line: 'JAVA_HOME="/usr/lib/jvm/java-11-openjdk-amd64"'
+    state: present
+  become: true
+
+- name: Add JAVA_HOME to bash profile
+  lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: "export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64"
+    state: present
+
+- name: Install Python packages (system-wide)
+  pip:
+    name:
+      - kubernetes
+      - openshift
+      - PyYAML
+      - jsonpatch
+    executable: pip3
+  become: true
+
+- name: Install Ansible Kubernetes collection
+  command: ansible-galaxy collection install kubernetes.core
+  changed_when: false
+
+- name: Ensure snapd is installed and running
+  apt:
+    name: snapd
+    state: present
+  become: true
+
+- name: Start and enable snapd
+  systemd:
+    name: snapd
+    state: started
+    enabled: yes
+  become: true
+
+- name: Configure kernel parameters for Kubernetes
+  sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_set: yes
+    state: present
+    reload: yes
+  loop:
+    - { key: "net.bridge.bridge-nf-call-iptables", value: "1" }
+    - { key: "net.bridge.bridge-nf-call-ip6tables", value: "1" }
+    - { key: "net.ipv4.ip_forward", value: "1" }
+    - { key: "vm.max_map_count", value: "262144" }    # Für Kafka/Elasticsearch
+    - { key: "fs.file-max", value: "65536" }
+  become: true
+  ignore_errors: yes
+
+- name: Ensure br_netfilter module is loaded
+  modprobe:
+    name: br_netfilter
+    state: present
+  become: true
+  ignore_errors: yes
+
+- name: Disable swap (required for Kubernetes)
+  command: swapoff -a
+  become: true
+  changed_when: false
+
+- name: Remove swap from fstab
+  lineinfile:
+    path: /etc/fstab
+    regexp: '\sswap\s'
+    state: absent
+  become: true
+
+- name: Create project directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    mode: '0755'
+  loop:
+    - "/opt/stock-platform"
+    - "/opt/stock-platform/data"
+    - "/opt/stock-platform/logs"
+    - "/opt/stock-platform/checkpoints"
+    - "/opt/stock-platform/backups"
+
+- name: Verify Java installation
+  command: java -version
+  register: java_version
+  changed_when: false
+
+- name: Display Java version
+  debug:
+    msg: "{{ java_version.stderr_lines }}"
