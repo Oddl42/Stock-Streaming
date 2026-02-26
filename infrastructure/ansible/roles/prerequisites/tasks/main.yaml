@@ -61,18 +61,21 @@
     state: present
 
 - name: Install Python packages (system-wide)
-  pip:
+  ansible.builtin.pip:
     name:
       - kubernetes
       - openshift
       - PyYAML
       - jsonpatch
     executable: pip3
+    break_system_packages: true
   become: true
 
 - name: Install Ansible Kubernetes collection
   command: ansible-galaxy collection install kubernetes.core
-  changed_when: false
+  delegate_to: localhost
+  become: false
+  run_once: true
 
 - name: Ensure snapd is installed and running
   apt:

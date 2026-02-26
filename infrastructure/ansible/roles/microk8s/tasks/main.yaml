@@ -113,8 +113,3 @@
     EOF
   become: true
   changed_when: false
-
-handlers:
-  - name: restart_microk8s
-    command: microk8s stop && microk8s start
-    become: true
