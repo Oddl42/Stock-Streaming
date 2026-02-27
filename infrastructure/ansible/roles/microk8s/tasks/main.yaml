@@ -26,7 +26,7 @@
 - name: Wait for MicroK8s to be ready
   command: microk8s status --wait-ready
   changed_when: false
-  timeout: 120
+  timeout: 360
   become: true
 
 - name: Enable MicroK8s addons
@@ -39,7 +39,7 @@
 - name: Wait for addons to be ready
   command: microk8s status --wait-ready
   changed_when: false
-  timeout: 180
+  timeout: 360
   become: true
 
 - name: Configure kubectl alias
