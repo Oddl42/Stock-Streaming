@@ -8,6 +8,8 @@ project_name: "stock-platform"
 project_namespace: "stock-platform"
 project_base_dir: "{{ playbook_dir }}/../../.."
 infrastructure_dir: "{{ playbook_dir }}/.."
+infrastructure_dir_1: "{{ playbook_dir }}/../.."
+
 
 # --- Versionen ---
 microk8s_channel: "1.28/stable"
@@ -36,15 +38,15 @@ images:
   ws_producer:
     name: "{{ docker_registry }}/stock-platform/ws-producer"
     tag: "{{ image_tag }}"
-    dockerfile: "{{ infrastructure_dir }}/docker/Dockerfile.ws-producer"
+    dockerfile: "{{ infrastructure_dir_1 }}/docker/Dockerfile.ws-producer"
   spark_job:
     name: "{{ docker_registry }}/stock-platform/spark-job"
     tag: "{{ image_tag }}"
-    dockerfile: "{{ infrastructure_dir }}/docker/Dockerfile.spark-job"
+    dockerfile: "{{ infrastructure_dir_1 }}/docker/Dockerfile.spark-job"
   panel_gui:
     name: "{{ docker_registry }}/stock-platform/panel-gui"
     tag: "{{ image_tag }}"
-    dockerfile: "{{ infrastructure_dir }}/docker/Dockerfile.panel-gui"
+    dockerfile: "{{ infrastructure_dir_1 }}/docker/Dockerfile.panel-gui"
 
 # --- Kafka ---
 kafka:

@@ -1,7 +1,8 @@
 # ============================================================
 # Spark Streaming Job: Kafka → TimescaleDB
 # ============================================================
-FROM bitnami/spark:3.5.0
+FROM apache/spark:3.5.1
+
 
 LABEL maintainer="stock-platform"
 LABEL component="spark-job"

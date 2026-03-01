@@ -5,8 +5,18 @@
 - name: Deploy Infrastructure Components
   hosts: k8s_nodes
   become: true
+  environment:
+    KUBECONFIG: /var/snap/microk8s/current/credentials/client.config
   tasks:
-
+    
+    # ==========================================
+    # 0. Install Helm
+    # ==========================================
+    - name: Install standalone Helm
+      shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+      args:
+        creates: /usr/local/bin/helm
+      become: true
     # ==========================================
     # 1. Strimzi Kafka Operator
     # ==========================================
