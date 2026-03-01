@@ -88,15 +88,33 @@
   debug:
     msg: "{{ pods_output.stdout_lines }}"
 
-- name: Configure MicroK8s registry
-  blockinfile:
-    path: /var/snap/microk8s/current/args/containerd-template.toml
-    block: |
-      [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:32000"]
-        endpoint = ["http://localhost:32000"]
-    marker: "# {mark} ANSIBLE MANAGED - Local Registry"
+- name: Ensure certs.d directory exists for localhost registry
+  file:
+    path: /var/snap/microk8s/current/args/certs.d/localhost:32000
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Configure localhost registry via hosts.toml
+  copy:
+    content: |
+      server = "http://localhost:32000"
+
+      [host."http://localhost:32000"]
+        capabilities = ["pull", "resolve", "push"]
+    dest: /var/snap/microk8s/current/args/certs.d/localhost:32000/hosts.toml
+    mode: '0644'
   become: true
   notify: restart_microk8s
+
+- name: Remove legacy mirrors block from containerd-template
+  blockinfile:
+    path: /var/snap/microk8s/current/args/containerd-template.toml
+    marker: "# {mark} ANSIBLE MANAGED - Local Registry"
+    state: absent
+  become: true
+  notify: restart_microk8s
+
 
 - name: Create StorageClass for local storage
   shell: |
