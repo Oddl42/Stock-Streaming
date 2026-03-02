@@ -170,7 +170,86 @@ EOF
     echo "✅ .env Template erstellt. Bitte API Keys eintragen!"
 fi
 
-# --- 8. Create project directories ---
+# --- 8. Install Ansible ---
+echo ""
+echo "🔧 Prüfe Ansible Installation..."
+if command -v ansible &> /dev/null; then
+    echo "✅ Ansible bereits installiert: $(ansible --version | head -n 1)"
+else
+    echo "⚠️  Ansible ist nicht installiert."
+    read -p "Möchtest du Ansible jetzt installieren? (y/n): " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        OS="$(uname -s)"
+
+        case "${OS}" in
+            Linux)
+                # Distribution erkennen
+                if [ -f /etc/os-release ]; then
+                    . /etc/os-release
+                    DISTRO_ID="${ID}"
+                else
+                    DISTRO_ID="unknown"
+                fi
+
+                case "${DISTRO_ID}" in
+                    ubuntu|debian)
+                        echo "📥 Installiere Ansible via PPA (Ubuntu/Debian)..."
+                        sudo apt-get update -y
+                        sudo apt-get install -y software-properties-common
+                        sudo add-apt-repository --yes --update ppa:ansible/ansible
+                        sudo apt-get install -y ansible
+                        ;;
+                    fedora)
+                        echo "📥 Installiere Ansible via dnf (Fedora)..."
+                        sudo dnf install -y ansible
+                        ;;
+                    rhel|centos|rocky|almalinux)
+                        echo "📥 Installiere Ansible via dnf/EPEL (RHEL/CentOS)..."
+                        # EPEL-Repository aktivieren falls nötig
+                        if ! rpm -q epel-release &> /dev/null; then
+                            sudo dnf install -y epel-release
+                        fi
+                        sudo dnf install -y ansible
+                        ;;
+                    *)
+                        echo "⚠️  Distribution '${DISTRO_ID}' nicht direkt unterstützt."
+                        echo "📥 Fallback: Installiere Ansible via pip..."
+                        python3 -m pip install --user ansible
+                        ;;
+                esac
+                ;;
+            Darwin)
+                echo "📥 Installiere Ansible via pip (macOS)..."
+                python3 -m pip install --user ansible
+                ;;
+            *)
+                echo "❌ Nicht unterstütztes Betriebssystem für Ansible-Installation: ${OS}"
+                exit 1
+                ;;
+        esac
+
+        # Verifizierung
+        if command -v ansible &> /dev/null; then
+            echo "✅ Ansible erfolgreich installiert: $(ansible --version | head -n 1)"
+        else
+            # Falls pip --user den PATH noch nicht aktualisiert hat
+            export PATH="$HOME/.local/bin:$PATH"
+            if command -v ansible &> /dev/null; then
+                echo "✅ Ansible erfolgreich installiert: $(ansible --version | head -n 1)"
+                echo "ℹ️  Hinweis: Füge folgende Zeile zu deiner ~/.bashrc oder ~/.zshrc hinzu:"
+                echo '   export PATH="$HOME/.local/bin:$PATH"'
+            else
+                echo "❌ Ansible Installation konnte nicht verifiziert werden."
+                echo "   Bitte prüfe die Installation manuell oder starte ein neues Terminal."
+            fi
+        fi
+    else
+        echo "⏭️  Ansible-Installation übersprungen."
+    fi
+fi
+
+# --- 9. Create project directories ---
 echo ""
 echo "📁 Erstelle Projektverzeichnisse..."
 mkdir -p "${SCRIPT_DIR}"/{data,config,backend/{database/migrations,websocket_producer,spark_streaming,data_service,api},frontend/{layouts,components,callbacks,charts,styles},infrastructure/{ansible/{inventory,playbooks,roles},helm/stock-platform/templates/{kafka,timescaledb,spark,app,monitoring},docker},monitoring/{prometheus,grafana/dashboards,exporters},tests,scripts}
