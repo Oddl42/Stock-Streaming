@@ -1,18 +1,42 @@
 {{- if .Values.kafka.enabled }}
-# Strimzi Kafka Operator wird via Helm Dependency installiert
-# Dieses Template erstellt den Kafka Cluster
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaNodePool
+metadata:
+  name: kafka-pool
+  namespace: kafka
+  labels:
+    strimzi.io/cluster: kafka-cluster
+spec:
+  replicas: {{ .Values.kafka.replicas | default 1 }}
+  roles:
+    - controller
+    - broker
+  storage:
+    type: jbod
+    volumes:
+      - id: 0
+        type: persistent-claim
+        size: {{ .Values.kafka.storage.size | default "5Gi" }}
+        deleteClaim: false
+  resources:
+    requests:
+      memory: {{ .Values.kafka.resources.requests.memory | default "512Mi" }}
+      cpu: {{ .Values.kafka.resources.requests.cpu | default "250m" }}
+    limits:
+      memory: {{ .Values.kafka.resources.limits.memory | default "1Gi" }}
+      cpu: {{ .Values.kafka.resources.limits.cpu | default "500m" }}
 ---
 apiVersion: kafka.strimzi.io/v1beta2
 kind: Kafka
 metadata:
   name: kafka-cluster
   namespace: kafka
-  labels:
-    {{- include "stock-platform.labels" . | nindent 4 }}
+  annotations:
+    strimzi.io/kraft: "enabled"
+    strimzi.io/node-pools: "enabled"
 spec:
   kafka:
-    version: {{ .Values.kafka.version }}
-    replicas: {{ .Values.kafka.replicas }}
+    version: "4.1.1"
     listeners:
       - name: plain
         port: 9092
@@ -26,48 +50,20 @@ spec:
           bootstrap:
             nodePort: 30092
     config:
-      offsets.topic.replication.factor: {{ .Values.kafka.config.offsetsTopicReplicationFactor }}
-      transaction.state.log.replication.factor: {{ .Values.kafka.config.transactionStateLogReplicationFactor }}
-      transaction.state.log.min.isr: {{ .Values.kafka.config.transactionStateLogMinIsr }}
-      default.replication.factor: {{ .Values.kafka.config.defaultReplicationFactor }}
-      min.insync.replicas: {{ .Values.kafka.config.minInsyncReplicas }}
-      log.retention.hours: {{ .Values.kafka.config.logRetentionHours }}
       auto.create.topics.enable: false
-      log.message.format.version: "3.6"
-      inter.broker.protocol.version: "3.6"
+      default.replication.factor: 1
+      min.insync.replicas: 1
       num.partitions: 8
-    storage:
-      type: persistent-claim
-      size: {{ .Values.kafka.storage.size }}
-      class: {{ .Values.kafka.storage.class }}
-      deleteClaim: false
-    resources:
-      requests:
-        memory: {{ .Values.kafka.resources.requests.memory }}
-        cpu: {{ .Values.kafka.resources.requests.cpu }}
-      limits:
-        memory: {{ .Values.kafka.resources.limits.memory }}
-        cpu: {{ .Values.kafka.resources.limits.cpu }}
+      offsets.topic.replication.factor: 1
+      transaction.state.log.replication.factor: 1
+      transaction.state.log.min.isr: 1
+      log.retention.hours: 48
     metricsConfig:
       type: jmxPrometheusExporter
       valueFrom:
         configMapKeyRef:
           name: kafka-metrics-config
           key: kafka-metrics-config.yml
-  zookeeper:
-    replicas: {{ .Values.kafka.zookeeper.replicas }}
-    storage:
-      type: persistent-claim
-      size: {{ .Values.kafka.zookeeper.storage.size }}
-      class: {{ .Values.kafka.zookeeper.storage.class }}
-      deleteClaim: false
-    resources:
-      requests:
-        memory: {{ .Values.kafka.zookeeper.resources.requests.memory }}
-        cpu: {{ .Values.kafka.zookeeper.resources.requests.cpu }}
-      limits:
-        memory: {{ .Values.kafka.zookeeper.resources.limits.memory }}
-        cpu: {{ .Values.kafka.zookeeper.resources.limits.cpu }}
   entityOperator:
     topicOperator: {}
     userOperator: {}

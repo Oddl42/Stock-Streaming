@@ -8,18 +8,54 @@
   environment:
     KUBECONFIG: /var/snap/microk8s/current/credentials/client.config
   tasks:
-    
+
     # ==========================================
-    # 0. Install Helm
+    # 0. Prerequisites
     # ==========================================
     - name: Install standalone Helm
       shell: curl https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
       args:
         creates: /usr/local/bin/helm
       become: true
+
+    # ==========================================
+    # 0.5 Ensure Namespaces exist (NOT managed by Helm)
+    # ==========================================
+    - name: Ensure project namespace exists
+      shell: >
+        microk8s kubectl create namespace {{ project_namespace }}
+        --dry-run=client -o yaml | microk8s kubectl apply -f -
+      become: true
+      changed_when: false
+      tags: [kafka, timescaledb, spark]
+
+    - name: Ensure kafka namespace exists
+      shell: >
+        microk8s kubectl create namespace kafka
+        --dry-run=client -o yaml | microk8s kubectl apply -f -
+      become: true
+      changed_when: false
+      tags: [kafka]
+
     # ==========================================
     # 1. Strimzi Kafka Operator
     # ==========================================
+    - name: Adopt orphaned Strimzi RoleBindings for Helm
+      shell: |
+        for rb in strimzi-cluster-operator strimzi-cluster-operator-entity-operator-delegation strimzi-cluster-operator-watched strimzi-cluster-operator-leader-election; do
+          microk8s kubectl annotate rolebinding -n kafka "$rb" \
+            meta.helm.sh/release-name=strimzi-kafka-operator \
+            meta.helm.sh/release-namespace=kafka \
+            --overwrite 2>/dev/null || true
+          microk8s kubectl label rolebinding -n kafka "$rb" \
+            app.kubernetes.io/managed-by=Helm \
+            --overwrite 2>/dev/null || true
+        done
+      become: true
+      changed_when: false
+      failed_when: false
+      tags: [kafka]
+
     - name: Add Strimzi Helm repository
       kubernetes.core.helm_repository:
         name: strimzi
@@ -31,7 +67,7 @@
         name: strimzi-kafka-operator
         chart_ref: strimzi/strimzi-kafka-operator
         release_namespace: kafka
-        create_namespace: true
+        create_namespace: false
         wait: true
         wait_timeout: "5m"
         values:
@@ -50,12 +86,26 @@
     # ==========================================
     # 2. Deploy via Helm Chart (Kafka Cluster + Topics)
     # ==========================================
+    - name: Adopt stock-platform namespace for Kafka Helm release
+      shell: |
+        microk8s kubectl annotate namespace {{ project_namespace }} \
+          meta.helm.sh/release-name=stock-platform-kafka \
+          meta.helm.sh/release-namespace={{ project_namespace }} \
+          --overwrite 2>/dev/null || true
+        microk8s kubectl label namespace {{ project_namespace }} \
+          app.kubernetes.io/managed-by=Helm \
+          --overwrite 2>/dev/null || true
+      become: true
+      changed_when: false
+      failed_when: false
+      tags: [kafka]
+
     - name: Deploy Stock Platform Helm Chart - Kafka Resources
       kubernetes.core.helm:
         name: stock-platform-kafka
         chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
         release_namespace: "{{ project_namespace }}"
-        create_namespace: true
+        create_namespace: false
         wait: true
         wait_timeout: "10m"
         values_files:
@@ -77,18 +127,40 @@
       changed_when: false
       retries: 3
       delay: 30
+      register: kafka_wait
+      until: kafka_wait.rc == 0
       tags: [kafka]
 
     # ==========================================
     # 3. TimescaleDB
     # ==========================================
+    - name: Re-adopt namespace for TimescaleDB Helm release
+      shell: |
+        microk8s kubectl annotate namespace {{ project_namespace }} \
+          meta.helm.sh/release-name=stock-platform-tsdb \
+          meta.helm.sh/release-namespace={{ project_namespace }} \
+          --overwrite 2>/dev/null || true
+      become: true
+      changed_when: false
+      failed_when: false
+      tags: [timescaledb]
+
+    - name: Pre-pull TimescaleDB images
+      shell: |
+        microk8s ctr image pull docker.io/timescale/timescaledb:latest-pg15 || true
+        microk8s ctr image pull docker.io/prometheuscommunity/postgres-exporter:v0.15.0 || true
+      become: true
+      changed_when: false
+      tags: [timescaledb]
+
     - name: Deploy Stock Platform Helm Chart - TimescaleDB
       kubernetes.core.helm:
         name: stock-platform-tsdb
         chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
         release_namespace: "{{ project_namespace }}"
+        create_namespace: false
         wait: true
-        wait_timeout: "5m"
+        wait_timeout: "15m"
         values_files:
           - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
           - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"
@@ -112,13 +184,33 @@
     # ==========================================
     # 4. Spark Master + Workers
     # ==========================================
+    - name: Re-adopt namespace for Spark Helm release
+      shell: |
+        microk8s kubectl annotate namespace {{ project_namespace }} \
+          meta.helm.sh/release-name=stock-platform-spark \
+          meta.helm.sh/release-namespace={{ project_namespace }} \
+          --overwrite 2>/dev/null || true
+      become: true
+      changed_when: false
+      failed_when: false
+      tags: [spark]
+
+    - name: Pre-pull Spark images
+      shell: |
+        microk8s ctr image pull docker.io/apache/spark:3.5.1 || true
+      become: true
+      changed_when: false
+      timeout: 600
+      tags: [spark]
+
     - name: Deploy Stock Platform Helm Chart - Spark
       kubernetes.core.helm:
         name: stock-platform-spark
         chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
         release_namespace: "{{ project_namespace }}"
+        create_namespace: false
         wait: true
-        wait_timeout: "5m"
+        wait_timeout: "15m"
         values_files:
           - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
           - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"

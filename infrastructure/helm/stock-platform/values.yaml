@@ -90,8 +90,8 @@ timescaledb:
 spark:
   enabled: true
   image:
-    repository: bitnami/spark
-    tag: "3.5.0"
+    repository: apache/spark
+    tag: "3.5.1"
   master:
     replicas: 1
     resources:

@@ -5,15 +5,35 @@
 - name: Deploy Monitoring Stack
   hosts: k8s_nodes
   become: true
+  environment:
+    KUBECONFIG: /var/snap/microk8s/current/credentials/client.config
   tasks:
 
+    # ==========================================
+    # 0. Namespace adopt for Helm
+    # ==========================================
+    - name: Re-adopt namespace for Monitoring Helm release
+      shell: |
+        microk8s kubectl annotate namespace {{ project_namespace }} \
+          meta.helm.sh/release-name=stock-platform-monitoring \
+          meta.helm.sh/release-namespace={{ project_namespace }} \
+          --overwrite 2>/dev/null || true
+      become: true
+      changed_when: false
+      failed_when: false
+      tags: [monitoring]
+
+    # ==========================================
+    # 1. Deploy Monitoring via Helm Chart
+    # ==========================================
     - name: Deploy Stock Platform Helm Chart - Monitoring
       kubernetes.core.helm:
         name: stock-platform-monitoring
         chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
         release_namespace: "{{ project_namespace }}"
+        create_namespace: false
         wait: true
-        wait_timeout: "5m"
+        wait_timeout: "15m"
         values_files:
           - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
           - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"
@@ -26,21 +46,29 @@
           - value: "app.panelGui.enabled=false"
       tags: [monitoring]
 
-    - name: Apply additional Prometheus scrape configs
-      command: >
-        microk8s kubectl apply -f -
-      args:
-        stdin: "{{ lookup('template', infrastructure_dir + '/helm/stock-platform/templates/monitoring/prometheus-config.yaml') }}"
+    # ==========================================
+    # 2. Wait for Monitoring pods
+    # ==========================================
+    - name: Wait for Monitoring pods to be ready
+      shell: |
+        microk8s kubectl wait --for=condition=Ready \
+          pod -l app=grafana \
+          -n {{ project_namespace }} --timeout=180s 2>/dev/null || true
+      become: true
       changed_when: false
       tags: [monitoring]
 
+    # ==========================================
+    # 3. Display access info
+    # ==========================================
     - name: Display monitoring access information
       debug:
         msg: |
           ✅ Monitoring deployed!
-          
+
           📊 Grafana:      http://localhost:{{ network.grafana_nodeport }}
              User:         {{ monitoring.grafana.admin_user }}
              Password:     {{ monitoring.grafana.admin_password }}
-          
+
           📈 Prometheus:   (via MicroK8s addon, ClusterIP)
+      tags: [monitoring]

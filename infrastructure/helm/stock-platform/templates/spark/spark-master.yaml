@@ -25,15 +25,21 @@ spec:
           image: "{{ .Values.spark.image.repository }}:{{ .Values.spark.image.tag }}"
           imagePullPolicy: {{ .Values.global.imagePullPolicy }}
           command:
-            - /opt/bitnami/spark/sbin/start-master.sh
+            - /opt/spark/bin/spark-class
+          args:
+            - org.apache.spark.deploy.master.Master
+            - --host
+            - "0.0.0.0"
+            - --port
+            - "7077"
+            - --webui-port
+            - "8080"
           ports:
             - containerPort: 7077
               name: spark
             - containerPort: 8080
               name: web-ui
           env:
-            - name: SPARK_MODE
-              value: "master"
             - name: SPARK_MASTER_HOST
               value: "0.0.0.0"
             - name: SPARK_MASTER_PORT
@@ -42,6 +48,8 @@ spec:
               value: "8080"
             - name: SPARK_DAEMON_MEMORY
               value: "512m"
+            - name: SPARK_HOME
+              value: "/opt/spark"
           resources:
             requests:
               memory: {{ .Values.spark.master.resources.requests.memory }}
@@ -80,7 +88,6 @@ spec:
   selector:
     app: spark-master
 ---
-# Spark UI NodePort (für externen Zugriff)
 apiVersion: v1
 kind: Service
 metadata:

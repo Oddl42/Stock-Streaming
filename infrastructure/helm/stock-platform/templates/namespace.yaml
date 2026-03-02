@@ -1,6 +1,6 @@
+{{- if .Values.createNamespace | default false }}
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: {{ include "stock-platform.namespace" . }}
-  labels:
-    {{- include "stock-platform.labels" . | nindent 4 }}
+  name: {{ .Release.Namespace }}
+{{- end }}
