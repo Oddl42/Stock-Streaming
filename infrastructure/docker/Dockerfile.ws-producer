@@ -30,6 +30,7 @@ RUN pip install --no-cache-dir \
 # Application code
 COPY config/ ./config/
 COPY backend/websocket_producer/ ./backend/websocket_producer/
+COPY backend/data_service ./backend/data_service
 COPY backend/__init__.py ./backend/
 COPY data/ ./data/
 
