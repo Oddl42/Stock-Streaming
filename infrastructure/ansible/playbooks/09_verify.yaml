@@ -47,9 +47,13 @@
       when: "'ALL_PODS_OK' not in bad_pods.stdout"
 
     - name: Verify Kafka connectivity
-      command: >
-        microk8s kubectl exec -n kafka kafka-cluster-kafka-0 --
-        bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+      shell: |
+        KAFKA_POD=$(microk8s kubectl get pods -n kafka \
+          -l strimzi.io/cluster=kafka-cluster \
+          -l strimzi.io/kind=Kafka \
+          -o jsonpath='{.items[0].metadata.name}')
+        microk8s kubectl exec -n kafka "$KAFKA_POD" -- \
+          bin/kafka-topics.sh --list --bootstrap-server localhost:9092
       register: kafka_topics
       changed_when: false
 
@@ -58,12 +62,15 @@
         msg: "Kafka Topics: {{ kafka_topics.stdout_lines }}"
 
     - name: Verify TimescaleDB connectivity
-      command: >
-        microk8s kubectl exec -n {{ project_namespace }}
-        $(microk8s kubectl get pods -n {{ project_namespace }} -l app=timescaledb -o jsonpath='{.items[0].metadata.name}')
-        -- psql -U {{ timescaledb.user }} -d {{ timescaledb.database }} -c "SELECT count(*) FROM timescaledb_information.hypertables;"
+      shell: |
+        TSDB_POD=$(microk8s kubectl get pods -n {{ project_namespace }} \
+          -l app=timescaledb -o jsonpath='{.items[0].metadata.name}')
+        microk8s kubectl exec -n {{ project_namespace }} "$TSDB_POD" -- \
+          psql -U {{ timescaledb.user }} -d {{ timescaledb.database }} \
+          -c "SELECT count(*) FROM timescaledb_information.hypertables;"
       register: tsdb_check
       changed_when: false
+
 
     - name: Display TimescaleDB hypertables
       debug:
