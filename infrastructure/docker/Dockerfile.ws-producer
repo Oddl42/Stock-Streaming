@@ -32,7 +32,7 @@ RUN pip install --no-cache-dir \
 # Application code
 COPY config/ ./config/
 COPY backend/websocket_producer/ ./backend/websocket_producer/
-COPY backend/data_service ./backend/data_service
+COPY backend/data_service/ ./backend/data_service/
 COPY backend/__init__.py ./backend/
 COPY data/ ./data/
 
@@ -47,4 +47,4 @@ ENV PYTHONPATH=/app
 # Metrics port
 EXPOSE 8092
 
-CMD ["python", "-m", "backend.websocket_producer.ws_client"]
+CMD ["python", "-m", "backend.websocket_producer"]
