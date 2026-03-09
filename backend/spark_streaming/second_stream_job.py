@@ -22,21 +22,28 @@ import signal
 import sys
 from typing import Optional
 
-from pyspark.sql import DataFrame
-from pyspark.sql.streaming import StreamingQuery
+try:
+    from pyspark.sql import DataFrame
+    from pyspark.sql.streaming import StreamingQuery
+    PYSPARK_AVAILABLE = True
+except ImportError:
+    DataFrame = None
+    StreamingQuery = None
+    PYSPARK_AVAILABLE = False
 
-from backend.spark_streaming.spark_session import SparkSessionFactory
-from backend.spark_streaming.schemas import AGGREGATE_SECOND_SCHEMA
-from backend.spark_streaming.transformations import transformer
-from backend.spark_streaming.quality_checks import second_quality_checker
-from backend.spark_streaming.db_sink import second_db_sink, dead_letter_sink
-from backend.spark_streaming.metrics import (
-    BatchMetricsCollector,
-    start_metrics_server,
-    ACTIVE_STREAMS,
-    BATCH_PROCESSING_TIME,
-)
-from config.spark_config import spark_config
+if PYSPARK_AVAILABLE:
+    from backend.spark_streaming.spark_session import SparkSessionFactory
+    from backend.spark_streaming.schemas import AGGREGATE_SECOND_SCHEMA
+    from backend.spark_streaming.transformations import transformer
+    from backend.spark_streaming.quality_checks import second_quality_checker
+    from backend.spark_streaming.db_sink import second_db_sink, dead_letter_sink
+    from backend.spark_streaming.metrics import (
+        BatchMetricsCollector,
+        start_metrics_server,
+        ACTIVE_STREAMS,
+        BATCH_PROCESSING_TIME,
+    )
+    from config.spark_config import spark_config
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +63,11 @@ class SecondStreamJob:
     """
 
     def __init__(self):
+        if not PYSPARK_AVAILABLE:
+            raise RuntimeError(
+                "pyspark ist nicht installiert. "
+                "SecondStreamJob kann nur im Spark-Container ausgeführt werden."
+            )
         self.spark = None
         self.query: Optional[StreamingQuery] = None
         self.metrics = BatchMetricsCollector(stream_type="second")

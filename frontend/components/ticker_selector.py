@@ -16,7 +16,7 @@ from backend.data_service.ticker_loader import ticker_loader
 
 class TickerSelector(param.Parameterized):
     """
-    Ermöglicht die Auswahl von Tickern:
+    Ermoeglicht die Auswahl von Tickern:
     - Alle S&P 500
     - Top 10 nach Marktkapitalisierung
     - Manuelle Eingabe
@@ -33,7 +33,7 @@ class TickerSelector(param.Parameterized):
     )
     selected_symbols = param.List(
         default=[],
-        doc="Aktuell ausgewählte Symbole",
+        doc="Aktuell ausgewaehlte Symbole",
     )
     apply_selection = param.Event(doc="Auswahl anwenden")
 
@@ -41,7 +41,6 @@ class TickerSelector(param.Parameterized):
         super().__init__(**params)
         self._all_symbols = ticker_loader.all_symbols
         self._top10_symbols = ticker_loader.top10_symbols
-        # Initialisiere mit Top 10
         self.selected_symbols = self._top10_symbols.copy()
 
     @param.depends("selection_mode", watch=True)
@@ -51,7 +50,6 @@ class TickerSelector(param.Parameterized):
             self.selected_symbols = self._all_symbols.copy()
         elif self.selection_mode == "Top 10":
             self.selected_symbols = self._top10_symbols.copy()
-        # Bei "Manuell" passiert nichts bis Apply
 
     def _apply_manual(self, event=None):
         """Manuelle Eingabe parsen und anwenden."""
@@ -61,7 +59,6 @@ class TickerSelector(param.Parameterized):
                 for s in self.manual_input.split(",")
                 if s.strip()
             ]
-            # Validiere gegen bekannte Symbole
             valid = [s for s in symbols if s in self._all_symbols]
             invalid = [s for s in symbols if s not in self._all_symbols]
 
@@ -75,20 +72,19 @@ class TickerSelector(param.Parameterized):
 
     @param.depends("selected_symbols")
     def _selection_info(self):
-        """Zeigt Info über aktuelle Auswahl."""
+        """Zeigt Info ueber aktuelle Auswahl."""
         count = len(self.selected_symbols)
         if count == 0:
             return pn.pane.Alert(
-                "⚠️ Keine Ticker ausgewählt!", alert_type="warning"
+                "Keine Ticker ausgewaehlt!", alert_type="warning"
             )
         return pn.pane.Markdown(
-            f"**{count} Ticker ausgewählt** ✅",
+            f"**{count} Ticker ausgewaehlt**",
             styles={"color": "#0f9d58", "font-size": "13px"},
         )
 
     def panel(self):
         """Erstellt die Panel-Komponente."""
-        # Mode Selector
         mode_select = pn.widgets.RadioButtonGroup.from_param(
             self.param.selection_mode,
             name="Auswahl-Modus",
@@ -96,7 +92,6 @@ class TickerSelector(param.Parameterized):
             button_style="outline",
         )
 
-        # Manual Input Field
         manual_field = pn.widgets.TextAreaInput(
             name="Ticker eingeben (kommasepariert)",
             placeholder="z.B. AAPL, MSFT, GOOGL, AMZN",
@@ -106,25 +101,23 @@ class TickerSelector(param.Parameterized):
             visible=False,
         )
 
-        # Apply Button (nur für Manuell)
         apply_btn = pn.widgets.Button(
-            name="✅ Auswahl anwenden",
+            name="Auswahl anwenden",
             button_type="primary",
             width=200,
             visible=False,
         )
 
-        # Autocomplete für Suche
+        # Panel 1.3.8: 'options' statt 'completions'
         search_field = pn.widgets.AutocompleteInput(
-            name="🔍 Ticker suchen",
-            completions=self._all_symbols,
+            name="Ticker suchen",
+            options=self._all_symbols,
             min_characters=1,
             placeholder="Symbol suchen...",
             case_sensitive=False,
             visible=False,
         )
 
-        # Dynamische Sichtbarkeit
         def update_visibility(event):
             is_manual = event.new == "Manuell"
             manual_field.visible = is_manual
@@ -133,14 +126,12 @@ class TickerSelector(param.Parameterized):
 
         mode_select.param.watch(update_visibility, "value")
 
-        # Apply Callback
         def on_apply(event):
             self.manual_input = manual_field.value
             self._apply_manual()
 
         apply_btn.on_click(on_apply)
 
-        # Search → Add to manual
         def on_search(event):
             if event.new and event.new in self._all_symbols:
                 current = manual_field.value
@@ -152,11 +143,10 @@ class TickerSelector(param.Parameterized):
 
         search_field.param.watch(on_search, "value")
 
-        # Info Panel
         info = pn.panel(self._selection_info)
 
         return pn.Column(
-            "### 🎯 Ticker Auswahl",
+            "### Ticker Auswahl",
             mode_select,
             search_field,
             manual_field,

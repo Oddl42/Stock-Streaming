@@ -16,7 +16,7 @@ def create_header():
     """Erstellt den Header mit Titel und Live-Uhr."""
 
     title = pn.pane.Markdown(
-        "# 📈 Stock Streaming Platform",
+        "# Stock Streaming Platform",
         styles={
             "font-size": "20px",
             "margin": "0",
@@ -34,10 +34,12 @@ def create_header():
     )
 
     # Live Clock
+    # Panel 1.3.8: pn.indicators.String hat KEIN 'title'
+    # Gueltige Params: name, value, default_color, font_size, title_size
     clock = pn.indicators.String(
+        name="Clock",
         value=datetime.now().strftime("%H:%M:%S"),
         font_size="14pt",
-        title="🕐",
     )
 
     def update_clock():

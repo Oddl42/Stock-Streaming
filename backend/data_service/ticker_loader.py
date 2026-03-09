@@ -6,11 +6,25 @@ Created on Wed Feb 25 22:00:09 2026
 @author: twi
 """
 
-"""Lädt S&P 500 Ticker aus CSV und stellt Auswahl-Logik bereit."""
+"""Laedt S&P 500 Ticker aus CSV und stellt Auswahl-Logik bereit."""
 
+import logging
 import pandas as pd
 from pathlib import Path
 from config.settings import settings
+
+logger = logging.getLogger(__name__)
+
+COLUMN_MAPPING = {
+    "Symbol":    ["Symbol", "symbol", "SYMBOL", "Ticker", "ticker"],
+    "Name":      ["Name", "name", "NAME", "Company", "company"],
+    "Sector":    ["Sector", "sector", "SECTOR", "GICS_Sector"],
+    "Industry":  ["Industry", "industry", "INDUSTRY", "Sub_Industry"],
+    "MarketCap": [
+        "MarketCap", "Market_Cap", "Market Cap", "marketCap",
+        "market_cap", "MARKETCAP", "Mkt_Cap", "MktCap",
+    ],
+}
 
 
 class TickerLoader:
@@ -22,15 +36,53 @@ class TickerLoader:
         self._load_csv()
 
     def _load_csv(self):
-        """CSV laden. Erwartet Spalten: Symbol, Name, Sector, Industry, MarketCap."""
+        """CSV laden und Spaltennamen standardisieren."""
         path = Path(self.csv_path)
         if not path.exists():
-            # Fallback: Erstelle Demo-Daten
+            logger.warning(f"CSV nicht gefunden: {path}. Verwende Demo-Daten.")
             self._df = self._create_demo_data()
             return
+
         self._df = pd.read_csv(path)
-        # Standardisiere Spaltennamen
-        self._df.columns = [c.strip().replace(" ", "_") for c in self._df.columns]
+        logger.info(f"CSV geladen: {path} ({len(self._df)} Zeilen)")
+        logger.info(f"Originale Spalten: {list(self._df.columns)}")
+        self._standardize_columns()
+        logger.info(f"Standardisierte Spalten: {list(self._df.columns)}")
+
+    def _standardize_columns(self):
+        """Mappt CSV-Spaltennamen auf erwartete Standardnamen."""
+        self._df.columns = [c.strip() for c in self._df.columns]
+
+        rename_map = {}
+        for target_name, variants in COLUMN_MAPPING.items():
+            if target_name in self._df.columns:
+                continue
+            for variant in variants:
+                if variant in self._df.columns:
+                    rename_map[variant] = target_name
+                    break
+
+        if rename_map:
+            logger.info(f"Spalten umbenannt: {rename_map}")
+            self._df.rename(columns=rename_map, inplace=True)
+
+        required = ["Symbol", "Name"]
+        missing = [col for col in required if col not in self._df.columns]
+        if missing:
+            logger.error(f"Pflicht-Spalten fehlen: {missing}")
+            raise ValueError(f"CSV fehlen Pflicht-Spalten: {missing}")
+
+        if "Sector" not in self._df.columns:
+            self._df["Sector"] = "Unknown"
+            logger.warning("Spalte 'Sector' fehlt - mit 'Unknown' gefuellt.")
+
+        if "Industry" not in self._df.columns:
+            self._df["Industry"] = "Unknown"
+            logger.warning("Spalte 'Industry' fehlt - mit 'Unknown' gefuellt.")
+
+        if "MarketCap" not in self._df.columns:
+            self._df["MarketCap"] = 0.0
+            logger.warning("Spalte 'MarketCap' fehlt - mit 0 gefuellt.")
 
     def _create_demo_data(self) -> pd.DataFrame:
         """Demo-Daten falls CSV nicht vorhanden."""
@@ -83,17 +135,17 @@ class TickerLoader:
 
     @property
     def all_tickers(self) -> pd.DataFrame:
-        """Alle S&P 500 Ticker."""
         return self._df.copy()
 
     @property
     def all_symbols(self) -> list[str]:
-        """Alle Symbole als Liste."""
         return self._df["Symbol"].tolist()
 
     @property
     def top10_by_market_cap(self) -> pd.DataFrame:
-        """Top 10 Ticker nach Marktkapitalisierung."""
+        if "MarketCap" not in self._df.columns:
+            logger.warning("MarketCap-Spalte fehlt, gebe erste 10 zurueck.")
+            return self._df.head(10).reset_index(drop=True)
         return (
             self._df
             .sort_values("MarketCap", ascending=False)
@@ -103,15 +155,12 @@ class TickerLoader:
 
     @property
     def top10_symbols(self) -> list[str]:
-        """Top 10 Symbole als Liste."""
         return self.top10_by_market_cap["Symbol"].tolist()
 
     def get_tickers_by_symbols(self, symbols: list[str]) -> pd.DataFrame:
-        """Filtere Ticker nach Symbolen."""
         return self._df[self._df["Symbol"].isin(symbols)].reset_index(drop=True)
 
     def search_symbols(self, query: str) -> list[str]:
-        """Suche Ticker nach Symbol oder Name."""
         query = query.upper()
         mask = (
             self._df["Symbol"].str.upper().str.contains(query, na=False)
@@ -120,5 +169,4 @@ class TickerLoader:
         return self._df[mask]["Symbol"].tolist()
 
 
-# Singleton
 ticker_loader = TickerLoader()

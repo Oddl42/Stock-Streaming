@@ -8,7 +8,6 @@ Created on Wed Feb 25 22:02:04 2026
 
 """Panel Theme und CSS Konfiguration."""
 
-# Custom CSS für die gesamte App
 CUSTOM_CSS = """
 /* ========== Global Styles ========== */
 :root {
@@ -23,7 +22,6 @@ CUSTOM_CSS = """
     --border-color: #3a3a4e;
 }
 
-/* ========== Sidebar Styles ========== */
 .sidebar-section {
     background: var(--bg-card);
     border-radius: 8px;
@@ -40,7 +38,6 @@ CUSTOM_CSS = """
     padding-bottom: 8px;
 }
 
-/* ========== Stream Status Indicator ========== */
 .stream-active {
     color: var(--success-color);
     font-weight: bold;
@@ -51,7 +48,6 @@ CUSTOM_CSS = """
     font-weight: bold;
 }
 
-/* ========== Ticker Table ========== */
 .ticker-table {
     font-size: 12px;
 }
@@ -60,14 +56,12 @@ CUSTOM_CSS = """
     background: var(--bg-dark);
 }
 
-/* ========== Chart Area ========== */
 .chart-container {
     border-radius: 8px;
     padding: 10px;
     background: var(--bg-card);
 }
 
-/* ========== Button Styles ========== */
 .bk-btn-success {
     background-color: var(--success-color) !important;
 }
@@ -76,7 +70,6 @@ CUSTOM_CSS = """
     background-color: var(--danger-color) !important;
 }
 
-/* ========== Responsive Adjustments ========== */
 @media (max-width: 1200px) {
     .bk-root {
         font-size: 13px;
@@ -84,23 +77,21 @@ CUSTOM_CSS = """
 }
 """
 
-# Panel Template Konfiguration
 TEMPLATE_CONFIG = {
-    "title": "📈 Stock Streaming Platform",
+    "title": "Stock Streaming Platform",
     "logo": "",
     "favicon": "",
     "sidebar_width": 380,
     "header_background": "#1a73e8",
-    "accent_base_color": "#1a73e8",
+    "accent": "#1a73e8",
 }
 
-# Farbpalette für Charts
 CHART_COLORS = {
-    "bullish": "#26a69a",      # Grün für steigende Kurse
-    "bearish": "#ef5350",      # Rot für fallende Kurse
-    "line": "#1a73e8",         # Blau für Linien-Chart
-    "volume": "#7986cb",       # Lila für Volumen
-    "grid": "#3a3a4e",         # Grid-Linien
-    "background": "#1e1e2e",   # Chart-Hintergrund
-    "text": "#e0e0e0",         # Text
+    "bullish": "#26a69a",
+    "bearish": "#ef5350",
+    "line": "#1a73e8",
+    "volume": "#7986cb",
+    "grid": "#3a3a4e",
+    "background": "#1e1e2e",
+    "text": "#e0e0e0",
 }
