@@ -49,11 +49,10 @@
     - name: Verify Kafka connectivity
       shell: |
         KAFKA_POD=$(microk8s kubectl get pods -n kafka \
-          -l strimzi.io/cluster=kafka-cluster \
-          -l strimzi.io/kind=Kafka \
+          -l strimzi.io/pool-name=kafka-pool \
           -o jsonpath='{.items[0].metadata.name}')
         microk8s kubectl exec -n kafka "$KAFKA_POD" -- \
-          bin/kafka-topics.sh --list --bootstrap-server localhost:9092
+          /opt/kafka/bin/kafka-topics.sh --list --bootstrap-server localhost:9092
       register: kafka_topics
       changed_when: false
 
