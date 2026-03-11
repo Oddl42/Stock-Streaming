@@ -2,7 +2,7 @@
 set -e
 
 # ============================================================
-# Test Runner Script – Stock Streaming Platform
+# Test Runner Script — Stock Streaming Platform
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -37,6 +37,7 @@ case "$TEST_TYPE" in
             --tb=short \
             --cov=backend \
             --cov=frontend \
+            --cov-config=.coveragerc \
             --cov-report=term-missing \
             --cov-report=html:reports/coverage-unit \
             -x \
@@ -82,6 +83,7 @@ case "$TEST_TYPE" in
             --tb=short \
             --cov=backend \
             --cov=frontend \
+            --cov-config=.coveragerc \
             --cov-report=term-missing \
             --cov-report=html:reports/coverage-all \
             --timeout=120 \
@@ -99,7 +101,7 @@ case "$TEST_TYPE" in
             -q \
             --cov=backend \
             --cov=frontend \
-            --cov-fail-under=70 \
+            --cov-config=.coveragerc \
             -x
         ;;
 

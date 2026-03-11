@@ -60,13 +60,13 @@ def get_crosshair_tool() -> CrosshairTool:
 def get_datetime_formatter() -> DatetimeTickFormatter:
     """Erstellt einen DateTime-Formatter für die X-Achse."""
     return DatetimeTickFormatter(
-        seconds=["%H:%M:%S"],
-        minsec=["%H:%M:%S"],
-        minutes=["%H:%M"],
-        hourmin=["%H:%M"],
-        hours=["%H:%M"],
-        days=["%d %b"],
-        months=["%b %Y"],
+        seconds="%H:%M:%S",
+        minsec="%H:%M:%S",
+        minutes="%H:%M",
+        hourmin="%H:%M",
+        hours="%H:%M",
+        days="%d %b",
+        months="%b %Y",
     )
 
 

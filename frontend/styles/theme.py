@@ -94,4 +94,5 @@ CHART_COLORS = {
     "grid": "#3a3a4e",
     "background": "#1e1e2e",
     "text": "#e0e0e0",
+    "warning": "#FFA500",
 }

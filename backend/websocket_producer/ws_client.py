@@ -65,6 +65,10 @@ from backend.websocket_producer.metrics import (
 logger = logging.getLogger(__name__)
 
 
+# ✅ Websockets-Version erkennen für Header-Kompatibilität
+_WS_MAJOR_VERSION = int(websockets.__version__.split('.')[0])
+
+
 class StreamType(Enum):
     SECOND = "second"
     MINUTE = "minute"
@@ -75,11 +79,11 @@ class MassiveWebSocketClient:
     Vollständiger WebSocket Client für die Massive.com API.
 
     Lifecycle:
-    1. connect()     → WebSocket-Verbindung herstellen
-    2. authenticate() → API-Key senden
-    3. subscribe()   → Ticker abonnieren (in Batches)
-    4. listen()      → Nachrichten empfangen und verarbeiten
-    5. disconnect()  → Sauberes Schließen
+    1. connect()     -> WebSocket-Verbindung herstellen
+    2. authenticate() -> API-Key senden
+    3. subscribe()   -> Ticker abonnieren (in Batches)
+    4. listen()      -> Nachrichten empfangen und verarbeiten
+    5. disconnect()  -> Sauberes Schließen
 
     Bei Verbindungsabbruch: Automatische Reconnection.
     """
@@ -149,7 +153,7 @@ class MassiveWebSocketClient:
 
     @property
     def prefix(self) -> str:
-        """Subscription-Prefix für den Stream-Typ."""
+        """Subscription-Prefix fuer den Stream-Typ."""
         return self.SUBSCRIPTION_PREFIX[self.stream_type]
 
     @property
@@ -169,7 +173,7 @@ class MassiveWebSocketClient:
         Startet den WebSocket Client.
 
         Dies ist die Hauptmethode, die den gesamten Lifecycle verwaltet.
-        Läuft in einer Endlosschleife mit automatischer Reconnection.
+        Laeuft in einer Endlosschleife mit automatischer Reconnection.
 
         Args:
             tickers: Liste der zu streamenden Ticker
@@ -241,7 +245,7 @@ class MassiveWebSocketClient:
         self._is_running = False
         self._stop_event.set()
 
-        # WebSocket schließen
+        # WebSocket schliessen
         if self._ws and self._ws.open:
             try:
                 # Unsubscribe zuerst
@@ -261,13 +265,13 @@ class MassiveWebSocketClient:
 
     async def _run_connection_cycle(self):
         """
-        Ein vollständiger Verbindungszyklus:
+        Ein vollstaendiger Verbindungszyklus:
         1. Connect
         2. Authenticate
         3. Subscribe
         4. Listen (Hauptschleife)
         """
-        # Rate Limit für Verbindungen
+        # Rate Limit fuer Verbindungen
         await self._rate_limiter.wait_for_connection()
 
         # Verbinden
@@ -298,6 +302,15 @@ class MassiveWebSocketClient:
         """Stellt die WebSocket-Verbindung her."""
         logger.info(f"Connecting to {self.WS_STOCKS_URL}...")
 
+        # ✅ Kompatibilität: websockets >= 13 nutzt 'additional_headers',
+        #    ältere Versionen nutzen 'extra_headers'
+        headers = {"User-Agent": "StockPlatform-WSProducer/1.0"}
+
+        if _WS_MAJOR_VERSION >= 13:
+            header_kwarg = {"additional_headers": headers}
+        else:
+            header_kwarg = {"extra_headers": headers}
+
         self._ws = await asyncio.wait_for(
             websockets.connect(
                 self.WS_STOCKS_URL,
@@ -306,9 +319,7 @@ class MassiveWebSocketClient:
                 close_timeout=self.CLOSE_TIMEOUT,
                 max_size=2**20,         # 1MB max message
                 compression=None,       # Keine Kompression (schneller)
-                extra_headers={
-                    "User-Agent": "StockPlatform-WSProducer/1.0",
-                },
+                **header_kwarg,         # ✅ Versionsabhängiger Header-Parameter
             ),
             timeout=self.CONNECT_TIMEOUT,
         )
@@ -347,7 +358,7 @@ class MassiveWebSocketClient:
                         f"Authentication failed: {status.message}"
                     )
 
-            # Fallback: Prüfe auf "connected" Status
+            # Fallback: Pruefe auf "connected" Status
             logger.info(f"Auth response: {response[:200]}")
             self._reconnect.on_authenticated()
 
@@ -431,9 +442,9 @@ class MassiveWebSocketClient:
 
     async def _listen(self):
         """
-        Hauptschleife: Empfängt und verarbeitet WebSocket-Nachrichten.
+        Hauptschleife: Empfaengt und verarbeitet WebSocket-Nachrichten.
 
-        Läuft bis:
+        Laeuft bis:
         - stop() aufgerufen wird
         - Die Verbindung abbricht
         - Ein kritischer Fehler auftritt
@@ -442,7 +453,7 @@ class MassiveWebSocketClient:
         last_poll_time = time.time()
 
         async for raw_message in self._ws:
-            # Stop-Signal prüfen
+            # Stop-Signal pruefen
             if self._stop_event.is_set():
                 break
 
@@ -475,7 +486,7 @@ class MassiveWebSocketClient:
         """
         self._message_count += 1
 
-        # Metriken: Message-Größe
+        # Metriken: Message-Groesse
         msg_size = len(raw_message.encode("utf-8"))
         WS_MESSAGE_SIZE.labels(
             stream_type=self.stream_type.value
@@ -496,13 +507,13 @@ class MassiveWebSocketClient:
             for error in result.errors:
                 logger.warning(f"Parse error: {error}")
 
-        # Ungültige Daten zählen
+        # Ungueltige Daten zaehlen
         if result.invalid_count > 0:
             WS_AGGREGATES_INVALID.labels(
                 stream_type=self.stream_type.value
             ).inc(result.invalid_count)
 
-        # Gültige Aggregates an Kafka senden
+        # Gueltige Aggregates an Kafka senden
         if result.aggregates:
             self.kafka_producer.produce_batch(result.aggregates)
 
@@ -538,10 +549,10 @@ class MassiveWebSocketClient:
     # =========================================
 
     async def _cleanup(self):
-        """Räumt alle Ressourcen auf."""
+        """Raeumt alle Ressourcen auf."""
         logger.info("Cleaning up...")
 
-        # WebSocket schließen
+        # WebSocket schliessen
         if self._ws and self._ws.open:
             try:
                 await self._ws.close()
@@ -563,7 +574,7 @@ class MassiveWebSocketClient:
         self._log_final_stats()
 
     def _log_final_stats(self):
-        """Loggt abschließende Statistiken."""
+        """Loggt abschliessende Statistiken."""
         elapsed = time.time() - self._start_time if self._start_time else 0
         parser_stats = self._parser.get_stats()
         kafka_stats = self.kafka_producer.get_stats()

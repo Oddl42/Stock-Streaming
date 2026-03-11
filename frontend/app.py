@@ -14,6 +14,7 @@ Starte mit:
 """
 
 import panel as pn
+import param
 import logging
 
 logging.basicConfig(
@@ -23,6 +24,7 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 logger.info(f"Panel version: {pn.__version__}")
+logger.info(f"Param version: {param.__version__}")
 
 # Panel Extensions
 try:
@@ -49,11 +51,30 @@ pn.config.raw_css.append(CUSTOM_CSS)
 from frontend.layouts.main_layout import create_main_layout
 
 
+def _get_template_params():
+    """
+    Ermittelt die gueltigen Parameter fuer MaterialTemplate.
+    Kompatibel mit param 1.x und param >= 2.0.
+    """
+    try:
+        # ✅ param >= 2.0
+        valid_params = set(pn.template.MaterialTemplate.param.objects().keys())
+    except AttributeError:
+        try:
+            # param 1.x
+            valid_params = set(pn.template.MaterialTemplate.param.params().keys())
+        except AttributeError:
+            # Fallback: Direkt aus param dict lesen
+            valid_params = set(dict(pn.template.MaterialTemplate.param).keys())
+
+    logger.info(f"MaterialTemplate valid params: {sorted(valid_params)}")
+    return valid_params
+
+
 def create_app():
     """Erstellt die komplette Panel-Applikation."""
 
-    valid_params = set(pn.template.MaterialTemplate.param.params().keys())
-    logger.info(f"MaterialTemplate valid params: {sorted(valid_params)}")
+    valid_params = _get_template_params()
 
     template_params = {
         "title": TEMPLATE_CONFIG.get("title", "Stock Streaming Platform"),

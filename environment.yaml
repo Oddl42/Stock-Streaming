@@ -27,7 +27,7 @@ dependencies:
   - kafka-python
   
   # Spark (PySpark)
-  - pyspark>=3.5
+  - pyspark=3.5.1
   - py4j
   
   # WebSocket

@@ -13,7 +13,7 @@ Unit Tests für den Candlestick Chart.
 import pytest
 import pandas as pd
 from bokeh.plotting import figure as bokeh_figure
-from bokeh.models import ColumnDataSource
+from bokeh.models import ColumnDataSource, DatetimeAxis  # ← NEU
 
 from frontend.charts.candlestick_chart import CandlestickChart
 from tests.fixtures.sample_data import generate_ohlcv_dataframe
@@ -36,7 +36,12 @@ class TestCandlestickChart:
     def test_figure_properties(self):
         """Testet Figure-Eigenschaften."""
         fig = self.chart.figure
-        assert fig.x_axis_type == "datetime"
+
+        # ✅ Bokeh 3.x: x_axis_type ist kein lesbares Attribut mehr.
+        # Stattdessen prüfen wir, ob eine DatetimeAxis vorhanden ist.
+        assert any(isinstance(axis, DatetimeAxis) for axis in fig.xaxis), \
+            "X-Achse sollte eine DatetimeAxis sein"
+
         assert fig.title is not None
         assert len(fig.tools) > 0
 

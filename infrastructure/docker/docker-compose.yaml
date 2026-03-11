@@ -1,9 +1,7 @@
 # ============================================================
-# Docker Compose – Lokales Development & Testing
+# Docker Compose - Lokales Development & Testing
 # Verwendung: docker compose -f infrastructure/docker/docker-compose.yaml up -d
 # ============================================================
-version: "3.9"
-
 services:
 
   # ==========================================
@@ -94,16 +92,18 @@ services:
   # Spark Master
   # ==========================================
   spark-master:
-    image: bitnami/spark:3.5.0
+    image: apache/spark:3.5.1
     container_name: spark-master
     ports:
-      - "8080:8080"   # Web UI
-      - "7077:7077"   # Spark Master
+      - "8080:8080"
+      - "7077:7077"
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.master.Master
     environment:
-      SPARK_MODE: master
-      SPARK_MASTER_HOST: 0.0.0.0
+      SPARK_MASTER_HOST: spark-master
+      SPARK_MASTER_PORT: "7077"
+      SPARK_MASTER_WEBUI_PORT: "8080"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080"]
+      test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080')\" || exit 1"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -112,14 +112,13 @@ services:
   # Spark Worker
   # ==========================================
   spark-worker:
-    image: bitnami/spark:3.5.0
+    image: apache/spark:3.5.1
     container_name: spark-worker
     depends_on:
       spark-master:
         condition: service_healthy
+    command: /opt/spark/bin/spark-class org.apache.spark.deploy.worker.Worker spark://spark-master:7077
     environment:
-      SPARK_MODE: worker
-      SPARK_MASTER_URL: spark://spark-master:7077
       SPARK_WORKER_MEMORY: 2g
       SPARK_WORKER_CORES: 2
 

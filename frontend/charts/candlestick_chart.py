@@ -28,6 +28,16 @@ from frontend.charts.chart_utils import (
 )
 from frontend.styles.theme import CHART_COLORS
 
+# ✅ Bokeh 3.x kompatibles leeres Dict (statt create_empty_source().data)
+EMPTY_DATA = {
+    "time": [],
+    "open": [],
+    "high": [],
+    "low": [],
+    "close": [],
+    "volume": [],
+}
+
 
 class CandlestickChart:
     """Interaktiver Bokeh Candlestick Chart."""
@@ -121,8 +131,9 @@ class CandlestickChart:
     def update(self, df: pd.DataFrame, symbol: str = ""):
         """Aktualisiert den Chart mit neuen Daten."""
         if df.empty:
-            self.source_inc.data = create_empty_source().data
-            self.source_dec.data = create_empty_source().data
+            # ✅ Bokeh 3.x Fix: Reines Python-Dict statt ColumnDataSource.data
+            self.source_inc.data = dict(EMPTY_DATA)
+            self.source_dec.data = dict(EMPTY_DATA)
             self.figure.title.text = f"{symbol} – Keine Daten verfügbar"
             return
 

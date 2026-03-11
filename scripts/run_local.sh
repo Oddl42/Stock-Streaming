@@ -2,9 +2,9 @@
 set -e
 
 # ============================================================
-# Lokaler Start aller Services – Stock Streaming Platform
+# Lokaler Start aller Services - Stock Streaming Platform
 # ============================================================
-# Startet alle Komponenten lokal für Entwicklung und Testing
+# Startet alle Komponenten lokal fuer Entwicklung und Testing
 # OHNE Kubernetes.
 #
 # Voraussetzungen:
@@ -27,6 +27,14 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
+# ✅ FIX: PYTHONPATH global setzen, damit alle Python-Prozesse
+# die Module (frontend, backend, config) finden koennen
+export PYTHONPATH="${PROJECT_DIR}:${PYTHONPATH}"
+
+if [[ -f "${CONDA_PREFIX}/bin/java" ]]; then
+    export JAVA_HOME="${CONDA_PREFIX}"
+fi
+
 # Farben
 GREEN='\033[0;32m'
 RED='\033[0;31m'
@@ -34,7 +42,7 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
-# PID-Datei für Background-Prozesse
+# PID-Datei fuer Background-Prozesse
 PID_DIR="/tmp/stock-platform-pids"
 mkdir -p "$PID_DIR"
 
@@ -45,7 +53,7 @@ mkdir -p "$PID_DIR"
 check_conda() {
     if [[ -z "$CONDA_DEFAULT_ENV" ]] || [[ "$CONDA_DEFAULT_ENV" != "stock-streaming" ]]; then
         echo -e "${RED}❌ Conda Environment 'stock-streaming' nicht aktiviert!${NC}"
-        echo "   Bitte ausführen: conda activate stock-streaming"
+        echo "   Bitte ausfuehren: conda activate stock-streaming"
         exit 1
     fi
     echo -e "${GREEN}✅ Conda Environment: $CONDA_DEFAULT_ENV${NC}"
@@ -54,7 +62,7 @@ check_conda() {
 check_env_file() {
     if [[ ! -f ".env" ]]; then
         echo -e "${RED}❌ .env Datei nicht gefunden!${NC}"
-        echo "   Bitte ausführen: cp .env.example .env && nano .env"
+        echo "   Bitte ausfuehren: cp .env.example .env && nano .env"
         exit 1
     fi
 
@@ -72,7 +80,7 @@ check_docker() {
         echo -e "${RED}❌ Docker nicht installiert!${NC}"
         exit 1
     fi
-    echo -e "${GREEN}✅ Docker verfügbar${NC}"
+    echo -e "${GREEN}✅ Docker verfuegbar${NC}"
 }
 
 wait_for_service() {
@@ -139,15 +147,16 @@ init_db() {
 start_producer() {
     echo -e "${CYAN}═══ WebSocket Producer starten ═══${NC}"
 
-    # Prüfe ob bereits läuft
+    # Pruefe ob bereits laeuft
     if [[ -f "$PID_DIR/ws-producer.pid" ]]; then
         local pid=$(cat "$PID_DIR/ws-producer.pid")
         if kill -0 "$pid" 2>/dev/null; then
-            echo -e "${YELLOW}WS Producer läuft bereits (PID: $pid)${NC}"
+            echo -e "${YELLOW}WS Producer laeuft bereits (PID: $pid)${NC}"
             return
         fi
     fi
 
+    # ✅ PYTHONPATH ist global gesetzt
     python -m backend.websocket_producer.entrypoint \
         --stream second --top10 --log-level INFO \
         &> /tmp/stock-platform-ws-producer.log &
@@ -164,9 +173,10 @@ start_spark() {
     if [[ -f "$PID_DIR/spark-second.pid" ]]; then
         local pid=$(cat "$PID_DIR/spark-second.pid")
         if kill -0 "$pid" 2>/dev/null; then
-            echo -e "${YELLOW}Spark Second Job läuft bereits (PID: $pid)${NC}"
+            echo -e "${YELLOW}Spark Second Job laeuft bereits (PID: $pid)${NC}"
         fi
     else
+        # ✅ PYTHONPATH ist global gesetzt
         python -m backend.spark_streaming.entrypoint \
             --job second --log-level INFO \
             &> /tmp/stock-platform-spark-second.log &
@@ -179,9 +189,10 @@ start_spark() {
     if [[ -f "$PID_DIR/spark-minute.pid" ]]; then
         local pid=$(cat "$PID_DIR/spark-minute.pid")
         if kill -0 "$pid" 2>/dev/null; then
-            echo -e "${YELLOW}Spark Minute Job läuft bereits (PID: $pid)${NC}"
+            echo -e "${YELLOW}Spark Minute Job laeuft bereits (PID: $pid)${NC}"
         fi
     else
+        # ✅ PYTHONPATH ist global gesetzt
         python -m backend.spark_streaming.entrypoint \
             --job minute --log-level INFO \
             &> /tmp/stock-platform-spark-minute.log &
@@ -200,11 +211,12 @@ start_gui() {
     if [[ -f "$PID_DIR/panel-gui.pid" ]]; then
         local pid=$(cat "$PID_DIR/panel-gui.pid")
         if kill -0 "$pid" 2>/dev/null; then
-            echo -e "${YELLOW}Panel GUI läuft bereits (PID: $pid)${NC}"
+            echo -e "${YELLOW}Panel GUI laeuft bereits (PID: $pid)${NC}"
             return
         fi
     fi
 
+    # ✅ PYTHONPATH ist global gesetzt – Panel findet jetzt frontend/backend/config Module
     panel serve frontend/app.py \
         --port 5006 \
         --address 0.0.0.0 \
@@ -309,12 +321,12 @@ case "$COMMAND" in
         echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
         echo -e "${GREEN}║  ✅ Alle Services gestartet!                ║${NC}"
         echo -e "${GREEN}╠══════════════════════════════════════════════╣${NC}"
-        echo -e "${GREEN}║  🖥️  GUI:      http://localhost:5006/app    ║${NC}"
-        echo -e "${GREEN}║  ⚡ Spark:    http://localhost:8080         ║${NC}"
-        echo -e "${GREEN}║  📊 Kafka UI: http://localhost:8088         ║${NC}"
+        echo -e "${GREEN}║  GUI:      http://localhost:5006/app         ║${NC}"
+        echo -e "${GREEN}║  Spark:    http://localhost:8080              ║${NC}"
+        echo -e "${GREEN}║  Kafka UI: http://localhost:8088              ║${NC}"
         echo -e "${GREEN}║                                              ║${NC}"
-        echo -e "${GREEN}║  Stoppen: ./scripts/run_local.sh stop       ║${NC}"
-        echo -e "${GREEN}║  Status:  ./scripts/run_local.sh status     ║${NC}"
+        echo -e "${GREEN}║  Stoppen: ./scripts/run_local.sh stop        ║${NC}"
+        echo -e "${GREEN}║  Status:  ./scripts/run_local.sh status      ║${NC}"
         echo -e "${GREEN}╚══════════════════════════════════════════════╝${NC}"
         ;;
 

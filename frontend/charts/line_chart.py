@@ -25,22 +25,26 @@ from frontend.charts.chart_utils import (
 )
 from frontend.styles.theme import CHART_COLORS
 
+# ✅ Bokeh 3.x kompatibles leeres Dict
+EMPTY_LINE_DATA = {
+    "time": [],
+    "close": [],
+    "volume": [],
+    "open": [],
+    "high": [],
+    "low": [],
+    "upper": [],
+    "lower": [],
+}
+
 
 class LineChart:
     """Interaktiver Bokeh Line Chart mit Volumen."""
 
     def __init__(self, stream_type: str = "second"):
         self.stream_type = stream_type
-        self.source = ColumnDataSource(data={
-            "time": [],
-            "close": [],
-            "volume": [],
-            "open": [],
-            "high": [],
-            "low": [],
-            "upper": [],
-            "lower": [],
-        })
+        self.source = ColumnDataSource(data=dict(EMPTY_LINE_DATA))
+        self._avg_span = None  # ✅ Referenz auf die Durchschnittslinie
         self.figure = self._create_figure()
 
     def _create_figure(self):
@@ -130,11 +134,7 @@ class LineChart:
     def update(self, df: pd.DataFrame, symbol: str = ""):
         """Aktualisiert den Line Chart mit neuen Daten."""
         if df.empty:
-            self.source.data = {
-                "time": [], "close": [], "volume": [],
-                "open": [], "high": [], "low": [],
-                "upper": [], "lower": [],
-            }
+            self.source.data = dict(EMPTY_LINE_DATA)
             self.figure.title.text = f"{symbol} – Keine Daten verfügbar"
             return
 
@@ -145,8 +145,8 @@ class LineChart:
             "open": df["open"].tolist(),
             "high": df["high"].tolist(),
             "low": df["low"].tolist(),
-            "upper": df["high"].tolist(),     # Band obere Grenze
-            "lower": df["low"].tolist(),      # Band untere Grenze
+            "upper": df["high"].tolist(),
+            "lower": df["low"].tolist(),
         }
 
         # Titel aktualisieren
@@ -160,20 +160,23 @@ class LineChart:
             f"{arrow} {change:+.2f} ({change_pct:+.2f}%)"
         )
 
-        # Durchschnittslinie hinzufügen
+        # Durchschnittslinie hinzufügen/aktualisieren
         if len(df) > 1:
             avg_price = df["close"].mean()
-            # Entferne alte Spans
-            self.figure.renderers = [
-                r for r in self.figure.renderers
-                if not isinstance(r, Span)
-            ]
-            avg_line = Span(
-                location=avg_price,
-                dimension="width",
-                line_color=CHART_COLORS["warning"],
-                line_dash="dashed",
-                line_width=1,
-                line_alpha=0.5,
-            )
-            self.figure.add_layout(avg_line)
+
+            # ✅ Bokeh 3.x Fix: Alte Span-Referenz direkt aktualisieren
+            # statt renderers-Liste zu filtern
+            if self._avg_span is not None:
+                # Existierende Linie aktualisieren
+                self._avg_span.location = avg_price
+            else:
+                # Neue Linie erstellen
+                self._avg_span = Span(
+                    location=avg_price,
+                    dimension="width",
+                    line_color=CHART_COLORS["warning"],
+                    line_dash="dashed",
+                    line_width=1,
+                    line_alpha=0.5,
+                )
+                self.figure.add_layout(self._avg_span)
