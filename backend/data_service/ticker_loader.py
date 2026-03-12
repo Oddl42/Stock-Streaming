@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 COLUMN_MAPPING = {
     "Symbol":    ["Symbol", "symbol", "SYMBOL", "Ticker", "ticker"],
-    "Name":      ["Name", "name", "NAME", "Company", "company"],
+    "Name":      ["Name", "name", "NAME", "Company", "company", "Shortname"],
     "Sector":    ["Sector", "sector", "SECTOR", "GICS_Sector"],
     "Industry":  ["Industry", "industry", "INDUSTRY", "Sub_Industry"],
     "MarketCap": [
