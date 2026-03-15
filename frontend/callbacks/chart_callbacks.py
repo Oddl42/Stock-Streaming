@@ -23,9 +23,17 @@ logger = logging.getLogger(__name__)
 class ChartCallbackHandler:
     """
     Verwaltet das periodische Update des Charts.
-    - Holt Daten aus TimescaleDB
-    - Aktualisiert den aktiven Chart (Candlestick oder Line)
-    - Update-Intervall: 2 Sekunden
+
+    ARCHITEKTUR:
+    - Wird pro Session NEU erstellt (in create_main_layout())
+    - KEIN Modul-Level Singleton mehr!
+    - Dadurch bekommt jede Session eigene Bokeh-Modelle
+    - → Kein E-1027 (REPEATED_LAYOUT_CHILD)
+
+    - self._chart_pane ist die EINZIGE pn.pane.Bokeh-Instanz
+    - chart_area.py holt sich diese Referenz über das Property chart_pane
+    - Bei Updates wird self._chart_pane.param.trigger("object") aufgerufen
+    - Bei Chart-Typ-Wechsel wird self._chart_pane.object ausgetauscht
     """
 
     def __init__(self):
@@ -37,7 +45,17 @@ class ChartCallbackHandler:
         self._current_stream_type: str = "second"
         self._is_streaming: bool = False
         self._periodic_callback: Optional[pn.state.PeriodicCallback] = None
-        self._use_demo_data: bool = True  # True für Entwicklung ohne DB
+        self._use_demo_data: bool = True
+
+        # EINZIGES Pane — wird über chart_pane Property ins Layout gehängt
+        self._chart_pane = pn.pane.Bokeh(
+            self.active_figure,
+            sizing_mode="stretch_width",
+        )
+
+    # --------------------------------------------------
+    # Properties
+    # --------------------------------------------------
 
     @property
     def active_chart(self):
@@ -51,18 +69,32 @@ class ChartCallbackHandler:
         """Gibt die aktive Bokeh Figure zurück."""
         return self.active_chart.figure
 
+    @property
+    def chart_pane(self) -> pn.pane.Bokeh:
+        """
+        Gibt die EINZIGE Pane-Referenz zurück.
+        Wird von chart_area.py ins Layout eingehängt.
+        """
+        return self._chart_pane
+
+    # --------------------------------------------------
+    # Setter
+    # --------------------------------------------------
+
     def set_symbol(self, symbol: str):
         """Setzt den aktuell zu plottenden Ticker."""
         self._current_symbol = symbol
         logger.info(f"Chart symbol changed to: {symbol}")
-        # Sofort updaten
         self._fetch_and_update()
 
     def set_chart_type(self, chart_type: str):
-        """Setzt den Chart-Typ (Candlestick/Linie)."""
+        """
+        Setzt den Chart-Typ (Candlestick/Linie).
+        Tauscht die Figure im EINZIGEN Pane aus.
+        """
         self._current_chart_type = chart_type
         logger.info(f"Chart type changed to: {chart_type}")
-        # Sofort updaten
+        self._chart_pane.object = self.active_figure
         self._fetch_and_update()
 
     def set_stream_type(self, stream_type_str: str):
@@ -70,15 +102,18 @@ class ChartCallbackHandler:
         self._current_stream_type = (
             "second" if stream_type_str == "Sekunden" else "minute"
         )
-        # Charts Stream-Typ aktualisieren
         self.candlestick_chart.stream_type = self._current_stream_type
         self.line_chart.stream_type = self._current_stream_type
         logger.info(f"Stream type changed to: {self._current_stream_type}")
 
+    # --------------------------------------------------
+    # Periodic Update
+    # --------------------------------------------------
+
     def start_periodic_update(self):
         """Startet das periodische Chart-Update."""
         if self._periodic_callback is not None:
-            return  # Bereits gestartet
+            return
 
         self._is_streaming = True
         self._periodic_callback = pn.state.add_periodic_callback(
@@ -98,6 +133,10 @@ class ChartCallbackHandler:
             self._periodic_callback = None
             logger.info("Periodic chart update stopped.")
 
+    # --------------------------------------------------
+    # Daten holen + Chart updaten
+    # --------------------------------------------------
+
     def _fetch_and_update(self):
         """Holt neue Daten und aktualisiert den Chart."""
         if not self._current_symbol:
@@ -105,34 +144,20 @@ class ChartCallbackHandler:
 
         try:
             if self._use_demo_data:
-                # Demo-Modus: Generiere Fake-Daten
                 df = data_provider.generate_demo_data(
                     symbol=self._current_symbol,
                     points=settings.CHART_MAX_POINTS,
                 )
             else:
-                # Produktiv: Hole Daten aus TimescaleDB
                 df = data_provider.get_latest_data(
                     symbol=self._current_symbol,
                     stream_type=self._current_stream_type,
                     limit=settings.CHART_MAX_POINTS,
                 )
 
-            # Aktualisiere den aktiven Chart
             self.active_chart.update(df, self._current_symbol)
+            self._chart_pane.param.trigger("object")
 
         except Exception as e:
             logger.error(f"Chart update error: {e}")
 
-    def get_chart_pane(self) -> pn.pane.Bokeh:
-        """
-        Gibt einen reaktiven Bokeh-Pane zurück, der den aktuellen Chart zeigt.
-        """
-        return pn.pane.Bokeh(
-            self.active_figure,
-            sizing_mode="stretch_width",
-        )
-
-
-# Singleton
-chart_callback_handler = ChartCallbackHandler()

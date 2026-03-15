@@ -22,7 +22,7 @@ COLUMN_MAPPING = {
     "Industry":  ["Industry", "industry", "INDUSTRY", "Sub_Industry"],
     "MarketCap": [
         "MarketCap", "Market_Cap", "Market Cap", "marketCap",
-        "market_cap", "MARKETCAP", "Mkt_Cap", "MktCap",
+        "market_cap", "MARKETCAP", "Mkt_Cap", "MktCap", "Marketcap",
     ],
 }
 

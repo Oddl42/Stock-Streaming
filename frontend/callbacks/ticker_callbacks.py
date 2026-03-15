@@ -13,7 +13,7 @@ import logging
 from frontend.components.ticker_selector import TickerSelector
 from frontend.components.ticker_dropdown import TickerDropdown
 from frontend.components.ticker_info_table import TickerInfoTable
-from frontend.callbacks.chart_callbacks import chart_callback_handler
+from frontend.callbacks.chart_callbacks import ChartCallbackHandler
 
 logger = logging.getLogger(__name__)
 
@@ -32,10 +32,12 @@ class TickerCallbackHandler:
         ticker_selector: TickerSelector,
         ticker_dropdown: TickerDropdown,
         ticker_info_table: TickerInfoTable,
+        chart_handler: ChartCallbackHandler,
     ):
         self.selector = ticker_selector
         self.dropdown = ticker_dropdown
         self.table = ticker_info_table
+        self.chart_handler = chart_handler
 
         # Registriere Watchers
         self._setup_watchers()
@@ -69,7 +71,7 @@ class TickerCallbackHandler:
         new_ticker = event.new
         if new_ticker:
             logger.info(f"Plot ticker changed to: {new_ticker}")
-            chart_callback_handler.set_symbol(new_ticker)
+            self.chart_handler.set_symbol(new_ticker)
 
 
 # Factory-Funktion (wird in main_layout verwendet)
@@ -77,5 +79,6 @@ def create_ticker_callback_handler(
     selector: TickerSelector,
     dropdown: TickerDropdown,
     table: TickerInfoTable,
+    chart_handler: ChartCallbackHandler,
 ) -> TickerCallbackHandler:
-    return TickerCallbackHandler(selector, dropdown, table)
+    return TickerCallbackHandler(selector, dropdown, table, chart_handler)

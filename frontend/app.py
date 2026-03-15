@@ -29,7 +29,7 @@ logger.info(f"Param version: {param.__version__}")
 # Panel Extensions
 try:
     pn.extension(
-        "bokeh", "tabulator",
+        "tabulator",
         notifications=True,
         sizing_mode="stretch_width",
         loading_spinner="dots",

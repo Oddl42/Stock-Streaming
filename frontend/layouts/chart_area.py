@@ -9,54 +9,26 @@ Created on Wed Feb 25 22:34:49 2026
 """Chart-Bereich: Zeigt den aktiven Chart (Candlestick oder Line)."""
 
 import panel as pn
-from bokeh.models import Div
-
-from frontend.charts.candlestick_chart import CandlestickChart
-from frontend.charts.line_chart import LineChart
-from frontend.callbacks.chart_callbacks import chart_callback_handler
+from frontend.callbacks.chart_callbacks import ChartCallbackHandler
 
 
-def create_chart_area() -> pn.Column:
+def create_chart_area(chart_handler: ChartCallbackHandler) -> pn.Column:
     """
-    Erstellt den Chart-Bereich mit dynamischem Chart-Wechsel.
+    Erstellt den Chart-Bereich.
+
+    Args:
+        chart_handler: Die ChartCallbackHandler-Instanz für diese Session.
+                       Wird in create_main_layout() erstellt und hierher übergeben.
+
+    WICHTIG:
+    - Wir verwenden chart_handler.chart_pane (das EINZIGE Pane)
+    - Kein eigenes pn.pane.Bokeh erstellen → kein E-1027!
+    - Chart-Typ-Wechsel läuft über chart_handler.set_chart_type()
     """
 
-    # Erstelle initiale Chart-Panes
-    candlestick_pane = pn.pane.Bokeh(
-        chart_callback_handler.candlestick_chart.figure,
+    chart_container = pn.Column(
+        chart_handler.chart_pane,
         sizing_mode="stretch_width",
     )
 
-    line_pane = pn.pane.Bokeh(
-        chart_callback_handler.line_chart.figure,
-        sizing_mode="stretch_width",
-    )
-
-    # Stack-Layout: Zeigt nur einen Chart
-    chart_stack = pn.layout.Card(
-        candlestick_pane,
-        title="📊 Live Chart",
-        sizing_mode="stretch_width",
-        collapsed=False,
-        header_background="#1a73e8",
-        header_color="white",
-    )
-
-    def switch_chart(chart_type: str):
-        """Wechselt zwischen Candlestick und Line Chart."""
-        chart_stack.clear()
-        if chart_type == "Candlestick":
-            chart_stack.append(pn.pane.Bokeh(
-                chart_callback_handler.candlestick_chart.figure,
-                sizing_mode="stretch_width",
-            ))
-        else:
-            chart_stack.append(pn.pane.Bokeh(
-                chart_callback_handler.line_chart.figure,
-                sizing_mode="stretch_width",
-            ))
-
-    # Expose switch function
-    chart_stack._switch_chart = switch_chart
-
-    return chart_stack
+    return chart_container

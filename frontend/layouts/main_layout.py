@@ -8,7 +8,6 @@ Created on Wed Feb 25 22:35:56 2026
 
 """
 Haupt-Layout: Orchestriert alle Komponenten und Callbacks.
-Dies ist das zentrale Modul, das alles zusammenfügt.
 """
 
 import panel as pn
@@ -26,7 +25,7 @@ from frontend.layouts.chart_area import create_chart_area
 from frontend.layouts.ticker_table import create_ticker_table_area
 
 from frontend.callbacks.stream_callbacks import stream_callback_handler
-from frontend.callbacks.chart_callbacks import chart_callback_handler
+from frontend.callbacks.chart_callbacks import ChartCallbackHandler
 from frontend.callbacks.ticker_callbacks import create_ticker_callback_handler
 from frontend.callbacks.table_callbacks import create_table_callback_handler
 
@@ -37,9 +36,18 @@ def create_main_layout() -> dict:
     """
     Erstellt das gesamte Layout der App und verbindet alle Callbacks.
 
+    WICHTIG: Der ChartCallbackHandler wird HIER pro Session erstellt,
+    NICHT als Modul-Level Singleton. Dadurch bekommt jede Session
+    eigene Bokeh-Modelle → kein E-1027 (REPEATED_LAYOUT_CHILD).
+
     Returns:
         Dict mit "sidebar" und "main" Schlüsseln für das Template.
     """
+
+    # =========================================
+    # 0. Chart-Handler pro Session erstellen
+    # =========================================
+    chart_handler = ChartCallbackHandler()
 
     # =========================================
     # 1. Erstelle alle Komponenten
@@ -60,7 +68,7 @@ def create_main_layout() -> dict:
         ticker_dropdown=ticker_dropdown,
     )
 
-    chart_area = create_chart_area()
+    chart_area = create_chart_area(chart_handler)
     table_area = create_ticker_table_area(ticker_info_table)
     header = create_header()
 
@@ -69,10 +77,13 @@ def create_main_layout() -> dict:
     # =========================================
 
     # --- Ticker Callbacks ---
+    # create_ticker_callback_handler() registriert intern einen Watcher
+    # auf dropdown.selected_ticker → ruft chart_handler.set_symbol() auf
     ticker_handler = create_ticker_callback_handler(
         selector=ticker_selector,
         dropdown=ticker_dropdown,
         table=ticker_info_table,
+        chart_handler=chart_handler,
     )
 
     # --- Table Callbacks ---
@@ -91,7 +102,6 @@ def create_main_layout() -> dict:
 
         stream_type = stream_controls.stream_type
 
-        # Backend Stream starten
         try:
             stream_callback_handler.on_stream_start(stream_type, tickers)
         except Exception as e:
@@ -101,11 +111,8 @@ def create_main_layout() -> dict:
             )
             return
 
-        # Chart Update starten
-        chart_callback_handler.set_stream_type(stream_type)
-        chart_callback_handler.start_periodic_update()
-
-        # Tabellen Update starten
+        chart_handler.set_stream_type(stream_type)
+        chart_handler.start_periodic_update()
         table_handler.start_periodic_update()
 
         logger.info(
@@ -116,13 +123,9 @@ def create_main_layout() -> dict:
         """Wird aufgerufen wenn der Stop-Button geklickt wird."""
         stream_type = stream_controls.stream_type
 
-        # Chart Update stoppen
-        chart_callback_handler.stop_periodic_update()
-
-        # Tabellen Update stoppen
+        chart_handler.stop_periodic_update()
         table_handler.stop_periodic_update()
 
-        # Backend Stream stoppen
         try:
             stream_callback_handler.on_stream_stop(stream_type)
         except Exception as e:
@@ -135,23 +138,26 @@ def create_main_layout() -> dict:
 
     # --- Chart Type Callback ---
     def on_chart_type_change(event):
-        """Wechselt den Chart-Typ."""
-        chart_callback_handler.set_chart_type(event.new)
-        chart_area._switch_chart(event.new)
+        """
+        Wechselt den Chart-Typ.
+        set_chart_type() tauscht intern _chart_pane.object aus.
+        Da chart_area dieselbe Pane-Referenz nutzt, wird der
+        Wechsel automatisch sichtbar.
+        """
+        chart_handler.set_chart_type(event.new)
 
     chart_type_selector.param.watch(on_chart_type_change, "chart_type")
 
     # --- Stream Type Callback ---
     def on_stream_type_change(event):
         """Wechselt den Stream-Typ."""
-        chart_callback_handler.set_stream_type(event.new)
+        chart_handler.set_stream_type(event.new)
 
     stream_controls.param.watch(on_stream_type_change, "stream_type")
 
     # =========================================
     # 4. Initiale Werte setzen
     # =========================================
-    # Lade Top 10 als Default
     ticker_selector.selection_mode = "Top 10"
 
     # =========================================
@@ -170,7 +176,7 @@ def create_main_layout() -> dict:
     # 6. Cleanup bei Shutdown
     # =========================================
     def on_session_destroyed(session_context):
-        chart_callback_handler.stop_periodic_update()
+        chart_handler.stop_periodic_update()
         table_handler.stop_periodic_update()
         stream_callback_handler.on_shutdown()
         logger.info("Session destroyed - cleanup complete.")

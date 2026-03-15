@@ -103,15 +103,27 @@ class DataProvider:
     def generate_demo_data(symbol: str = "AAPL", points: int = 100) -> pd.DataFrame:
         """Generiert Demo-Daten für die Entwicklung (ohne DB)."""
         import numpy as np
-
-        np.random.seed(42)
+    
+        # ✅ FIX: Dynamischer Seed basierend auf Symbol + aktuelle Sekunde
+        #    → Jeder Ticker sieht anders aus
+        #    → Bei jedem Aufruf ändern sich die Daten leicht (Live-Effekt)
+        seed = hash(symbol) % 2**31 + int(datetime.now().timestamp()) % 1000
+        np.random.seed(seed)
+    
         now = datetime.now()
         times = [now - timedelta(seconds=i) for i in range(points, 0, -1)]
-
-        base_price = 185.0
+    
+        # ✅ FIX: Unterschiedlicher Basispreis je Ticker
+        SYMBOL_PRICES = {
+            "AAPL": 185.0, "MSFT": 420.0, "GOOGL": 175.0,
+            "AMZN": 195.0, "NVDA": 880.0, "META": 510.0,
+            "TSLA": 175.0, "JPM": 205.0, "V": 285.0,
+        }
+        base_price = SYMBOL_PRICES.get(symbol, 100.0 + hash(symbol) % 200)
+    
         noise = np.cumsum(np.random.randn(points) * 0.5)
         prices = base_price + noise
-
+    
         data = {
             "time": times,
             "symbol": [symbol] * points,

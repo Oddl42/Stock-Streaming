@@ -18,6 +18,9 @@ class Settings:
     """Zentrale Konfiguration – liest Werte bei jeder Instanziierung aus Environment."""
 
     def __init__(self):
+        # Use Demo Data
+        self.USE_DEMO_DATA: bool = True
+        
         # Massive.com API
         self.MASSIVE_API_KEY: str = os.getenv("MASSIVE_API_KEY", "")
         self.MASSIVE_WS_URL: str = os.getenv("MASSIVE_WS_URL", "wss://delayed.massive.com")
