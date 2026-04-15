@@ -1,0 +1,82 @@
+---
+# ============================================================
+# Docker Images bauen und in MicroK8s Registry pushen
+# ============================================================
+
+- name: Ensure project context exists
+  stat:
+    path: "{{ project_base_dir }}"
+  register: project_dir
+
+- name: Fail if project directory not found
+  fail:
+    msg: "Project directory {{ project_base_dir }} not found!"
+  when: not project_dir.stat.exists
+
+# --- WebSocket Producer Image ---
+- name: Build WebSocket Producer image
+  docker_image:
+    name: "{{ images.ws_producer.name }}"
+    tag: "{{ images.ws_producer.tag }}"
+    source: build
+    build:
+      path: "{{ project_base_dir }}"
+      dockerfile: "{{ images.ws_producer.dockerfile }}"
+      pull: yes
+    force_source: yes
+
+- name: Push WebSocket Producer image to registry
+  docker_image:
+    name: "{{ images.ws_producer.name }}"
+    tag: "{{ images.ws_producer.tag }}"
+    push: yes
+    source: local
+
+# --- Spark Job Image ---
+- name: Build Spark Job image
+  docker_image:
+    name: "{{ images.spark_job.name }}"
+    tag: "{{ images.spark_job.tag }}"
+    source: build
+    build:
+      path: "{{ project_base_dir }}"
+      dockerfile: "{{ images.spark_job.dockerfile }}"
+      pull: yes
+    force_source: yes
+
+- name: Push Spark Job image to registry
+  docker_image:
+    name: "{{ images.spark_job.name }}"
+    tag: "{{ images.spark_job.tag }}"
+    push: yes
+    source: local
+
+# --- Panel GUI Image ---
+- name: Build Panel GUI image
+  docker_image:
+    name: "{{ images.panel_gui.name }}"
+    tag: "{{ images.panel_gui.tag }}"
+    source: build
+    build:
+      path: "{{ project_base_dir }}"
+      dockerfile: "{{ images.panel_gui.dockerfile }}"
+      pull: yes
+    force_source: yes
+
+- name: Push Panel GUI image to registry
+  docker_image:
+    name: "{{ images.panel_gui.name }}"
+    tag: "{{ images.panel_gui.tag }}"
+    push: yes
+    source: local
+
+- name: Verify images in registry
+  uri:
+    url: "http://localhost:32000/v2/_catalog"
+    return_content: yes
+  register: registry_catalog
+  changed_when: false
+
+- name: Display registry contents
+  debug:
+    msg: "{{ registry_catalog.json }}"

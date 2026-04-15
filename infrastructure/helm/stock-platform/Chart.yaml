@@ -1,0 +1,19 @@
+apiVersion: v2
+name: stock-platform
+description: Stock Streaming Platform - Real-time S&P 500 data pipeline
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
+
+keywords:
+  - stock
+  - streaming
+  - spark
+  - kafka
+  - timescaledb
+  - panel
+
+maintainers:
+  - name: Stock Platform Team
+
+

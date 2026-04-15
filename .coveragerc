@@ -1,0 +1,40 @@
+[run]
+source =
+    backend
+    frontend
+
+omit =
+    # Database (braucht TimescaleDB)
+    backend/database/*
+    backend/data_service/data_provider.py
+
+    # Spark Streaming (braucht Spark Session)
+    backend/spark_streaming/entrypoint.py
+    backend/spark_streaming/spark_session.py
+    backend/spark_streaming/stream_job_manager.py
+    backend/spark_streaming/db_sink.py
+    backend/spark_streaming/second_stream_job.py
+    backend/spark_streaming/minute_stream_job.py
+    backend/spark_streaming/quality_checks.py
+    backend/spark_streaming/metrics.py
+
+    # WebSocket Producer (Startup-Code)
+    backend/websocket_producer/__init__.py
+    backend/websocket_producer/ws_client.py
+    backend/websocket_producer/stream_manager.py
+    backend/websocket_producer/entrypoint.py
+    backend/websocket_producer/__main__.py
+
+    # GUI (braucht Panel Server)
+    frontend/app.py
+    frontend/callbacks/*
+    frontend/components/*
+    frontend/layouts/*
+
+[report]
+fail_under = 70
+show_missing = true
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
+    pass

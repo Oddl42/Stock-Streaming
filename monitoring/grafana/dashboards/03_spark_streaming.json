@@ -1,0 +1,256 @@
+{
+  "description": "Spark Structured Streaming Jobs - Second & Minute Aggregation",
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 300,
+      "title": "⚡ Job Status & KPIs",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 301,
+      "title": "Active Streaming Jobs",
+      "type": "stat",
+      "targets": [
+        { "expr": "spark_streaming_active_streams", "legendFormat": "Jobs" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "gridPos": { "h": 4, "w": 5, "x": 4, "y": 1 },
+      "id": 302,
+      "title": "Total Batches (Second)",
+      "type": "stat",
+      "targets": [
+        { "expr": "spark_streaming_batches_processed_total{stream_type=\"second\"}", "legendFormat": "Batches" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "gridPos": { "h": 4, "w": 5, "x": 9, "y": 1 },
+      "id": 303,
+      "title": "Total Batches (Minute)",
+      "type": "stat",
+      "targets": [
+        { "expr": "spark_streaming_batches_processed_total{stream_type=\"minute\"}", "legendFormat": "Batches" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": { "unit": "short" }
+      },
+      "gridPos": { "h": 4, "w": 5, "x": 14, "y": 1 },
+      "id": 304,
+      "title": "Total Records Written",
+      "type": "stat",
+      "targets": [
+        { "expr": "sum(spark_streaming_records_written_total)", "legendFormat": "Records" }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.05 },
+              { "color": "red", "value": 0.1 }
+            ]
+          },
+          "max": 1, "min": 0
+        }
+      },
+      "gridPos": { "h": 4, "w": 5, "x": 19, "y": 1 },
+      "id": 305,
+      "title": "Rejection Rate",
+      "type": "gauge",
+      "targets": [
+        {
+          "expr": "sum(spark_streaming_records_rejected_total) / (sum(spark_streaming_records_written_total) + sum(spark_streaming_records_rejected_total) + 1)",
+          "legendFormat": "Rate"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 310,
+      "title": "📊 Batch Processing",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20, "gradientMode": "scheme" }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 311,
+      "title": "⏱️ Batch Processing Time",
+      "type": "timeseries",
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "p99"] }
+      },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(spark_streaming_batch_processing_seconds_bucket[5m]))",
+          "legendFormat": "p50 {{stream_type}}"
+        },
+        {
+          "expr": "histogram_quantile(0.95, rate(spark_streaming_batch_processing_seconds_bucket[5m]))",
+          "legendFormat": "p95 {{stream_type}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(spark_streaming_batch_processing_seconds_bucket[5m]))",
+          "legendFormat": "p99 {{stream_type}}"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 80 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 312,
+      "title": "📦 Batch Size (Records per Batch)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "spark_streaming_current_batch_size",
+          "legendFormat": "{{stream_type}}"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "id": 313,
+      "title": "💾 DB Write Time",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.50, rate(spark_streaming_batch_write_seconds_bucket[5m]))",
+          "legendFormat": "p50 {{stream_type}} → {{table}}"
+        },
+        {
+          "expr": "histogram_quantile(0.99, rate(spark_streaming_batch_write_seconds_bucket[5m]))",
+          "legendFormat": "p99 {{stream_type}} → {{table}}"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "id": 314,
+      "title": "📈 Records Throughput (per Second)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(spark_streaming_records_written_total{stream_type=\"second\"}[1m])",
+          "legendFormat": "Written (second)"
+        },
+        {
+          "expr": "rate(spark_streaming_records_written_total{stream_type=\"minute\"}[1m])",
+          "legendFormat": "Written (minute)"
+        },
+        {
+          "expr": "rate(spark_streaming_records_rejected_total[1m])",
+          "legendFormat": "Rejected ({{stream_type}})"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "id": 320,
+      "title": "❌ Errors & Quality",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 70 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 23 },
+      "id": 321,
+      "title": "🚫 Rejected Records (by Reason)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(spark_streaming_records_rejected_total[5m])",
+          "legendFormat": "{{stream_type}} - {{reason}}"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "fixedColor": "red", "mode": "fixed" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 80 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 23 },
+      "id": 322,
+      "title": "💥 Write Errors",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(spark_streaming_write_errors_total[5m])",
+          "legendFormat": "{{stream_type}} → {{table}}"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["stock-platform", "spark"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "⚡ Spark Streaming",
+  "uid": "spark-streaming",
+  "version": 1
+}

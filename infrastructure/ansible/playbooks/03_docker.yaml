@@ -1,0 +1,163 @@
+---
+# ============================================================
+# Playbook 03: Docker Installation & Konfiguration
+# ============================================================
+# Installiert Docker CE, konfiguriert die insecure Registry
+# für MicroK8s und verifiziert die Installation.
+#
+# Verwendung:
+#   ansible-playbook playbooks/03_docker.yaml
+#   ansible-playbook playbooks/03_docker.yaml --tags "install"
+#   ansible-playbook playbooks/03_docker.yaml --tags "verify"
+# ============================================================
+
+- name: Install and Configure Docker
+  hosts: k8s_nodes
+  become: true
+
+  pre_tasks:
+    - name: Check if Docker is already installed
+      command: docker --version
+      register: docker_existing
+      changed_when: false
+      failed_when: false
+      tags: [always]
+
+    - name: Display existing Docker version
+      debug:
+        msg: "Docker already installed: {{ docker_existing.stdout }}"
+      when: docker_existing.rc == 0
+      tags: [always]
+
+  roles:
+    - role: docker
+      tags: [install]
+
+  post_tasks:
+    # ==========================================
+    # Docker Compose Plugin verifizieren
+    # ==========================================
+    - name: Verify Docker Compose plugin
+      command: docker compose version
+      register: compose_version
+      changed_when: false
+      tags: [verify]
+
+    - name: Display Docker Compose version
+      debug:
+        msg: "{{ compose_version.stdout }}"
+      tags: [verify]
+
+    # ==========================================
+    # Docker Buildx verifizieren
+    # ==========================================
+    - name: Verify Docker Buildx
+      command: docker buildx version
+      register: buildx_version
+      changed_when: false
+      tags: [verify]
+
+    - name: Display Buildx version
+      debug:
+        msg: "{{ buildx_version.stdout }}"
+      tags: [verify]
+
+    # ==========================================
+    # Docker Daemon Status prüfen
+    # ==========================================
+    - name: Check Docker daemon status
+      systemd:
+        name: docker
+        state: started
+      register: docker_status
+      tags: [verify]
+
+    - name: Verify Docker daemon configuration
+      command: docker info --format '{{ "{{" }}.RegistryConfig.InsecureRegistryCIDRs{{ "}}" }}'
+      register: docker_registries
+      changed_when: false
+      tags: [verify]
+
+    - name: Display Docker registry config
+      debug:
+        msg: "Insecure Registries: {{ docker_registries.stdout }}"
+      tags: [verify]
+
+    # ==========================================
+    # Docker Netzwerk für lokales Testing erstellen
+    # ==========================================
+    - name: Create Docker network for local development
+      docker_network:
+        name: stock-platform-network
+        driver: bridge
+        state: present
+      tags: [install]
+
+    # ==========================================
+    # Docker System Prune (optional, aufräumen)
+    # ==========================================
+    - name: Check Docker disk usage
+      command: docker system df
+      register: docker_disk
+      changed_when: false
+      tags: [verify]
+
+    - name: Display Docker disk usage
+      debug:
+        msg: "{{ docker_disk.stdout_lines }}"
+      tags: [verify]
+
+    # ==========================================
+    # Smoke Test: Docker Run
+    # ==========================================
+    - name: Run Docker smoke test
+      docker_container:
+        name: docker-smoke-test
+        image: hello-world
+        state: started
+        auto_remove: yes
+        detach: false
+      register: smoke_test
+      tags: [verify]
+
+    - name: Display smoke test result
+      debug:
+        msg: "Docker smoke test: {{ 'PASSED ✅' if smoke_test is succeeded else 'FAILED ❌' }}"
+      tags: [verify]
+
+    # ==========================================
+    # Logrotate für Docker konfigurieren
+    # ==========================================
+    - name: Configure Docker log rotation
+      copy:
+        content: |
+          /var/lib/docker/containers/*/*.log {
+            rotate 7
+            daily
+            compress
+            size 10M
+            missingok
+            delaycompress
+            copytruncate
+          }
+        dest: /etc/logrotate.d/docker-containers
+        mode: '0644'
+      tags: [install]
+
+    # ==========================================
+    # Zusammenfassung
+    # ==========================================
+    - name: Docker installation summary
+      debug:
+        msg: |
+          ✅ Docker Installation abgeschlossen!
+
+          Docker Version:   {{ docker_existing.stdout if docker_existing.rc == 0 else 'Neu installiert' }}
+          Compose Version:  {{ compose_version.stdout }}
+          Buildx Version:   {{ buildx_version.stdout }}
+          Daemon Status:    Running ✅
+          Network:          stock-platform-network erstellt
+          Insecure Registry: localhost:32000 konfiguriert
+
+          Nächster Schritt: ansible-playbook playbooks/04_cluster_init.yaml
+      tags: [verify]

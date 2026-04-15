@@ -1,0 +1,103 @@
+---
+# ============================================================
+# Deploy Application Components
+# ============================================================
+- name: Deploy Application
+  hosts: k8s_nodes
+  become: true
+  environment:
+    KUBECONFIG: /var/snap/microk8s/current/credentials/client.config
+  tasks:
+
+    # ==========================================
+    # 0. Namespace adopt for Helm
+    # ==========================================
+    - name: Re-adopt namespace for App Helm release
+      shell: |
+        microk8s kubectl annotate namespace {{ project_namespace }} \
+          meta.helm.sh/release-name=stock-platform-app \
+          meta.helm.sh/release-namespace={{ project_namespace }} \
+          --overwrite 2>/dev/null || true
+      become: true
+      changed_when: false
+      failed_when: false
+      tags: [app]
+
+    # ==========================================
+    # 1. Pre-pull Application images
+    # ==========================================
+    - name: Pre-pull Application images from local registry
+      shell: |
+        microk8s ctr image pull localhost:32000/stock-platform/ws-producer:latest || true
+        microk8s ctr image pull localhost:32000/stock-platform/spark-job:latest || true
+        microk8s ctr image pull localhost:32000/stock-platform/panel-gui:latest || true
+      become: true
+      changed_when: false
+      timeout: 300
+      tags: [app]
+
+    # ==========================================
+    # 2. Deploy Application via Helm Chart
+    # ==========================================
+    - name: Deploy Stock Platform Helm Chart - Application
+      kubernetes.core.helm:
+        name: stock-platform-app
+        chart_ref: "{{ infrastructure_dir }}/helm/stock-platform"
+        release_namespace: "{{ project_namespace }}"
+        create_namespace: false
+        wait: true
+        wait_timeout: "15m"
+        values_files:
+          - "{{ infrastructure_dir }}/helm/stock-platform/values.yaml"
+          - "{{ infrastructure_dir }}/helm/stock-platform/values-dev.yaml"
+        set_values:
+          - value: "kafka.enabled=false"
+          - value: "timescaledb.enabled=false"
+          - value: "spark.enabled=false"
+          - value: "monitoring.enabled=false"
+      tags: [app]
+
+    # ==========================================
+    # 3. Wait for Application pods
+    # ==========================================
+    - name: Wait for WS-Producer to be ready
+      shell: >
+        microk8s kubectl wait --for=condition=Ready
+        pod -l app=ws-producer
+        -n {{ project_namespace }} --timeout=180s 2>/dev/null || true
+      become: true
+      changed_when: false
+      tags: [app]
+
+    - name: Wait for Panel GUI to be ready
+      shell: >
+        microk8s kubectl wait --for=condition=Ready
+        pod -l app=panel-gui
+        -n {{ project_namespace }} --timeout=180s 2>/dev/null || true
+      become: true
+      changed_when: false
+      tags: [app]
+
+    # ==========================================
+    # 4. Verify and display access info
+    # ==========================================
+    - name: Get application pod status
+      command: "microk8s kubectl get pods -n {{ project_namespace }} -l 'app in (ws-producer, spark-job, panel-gui)' -o wide"
+      register: app_pods
+      changed_when: false
+      tags: [app]
+
+    - name: Display application pod status
+      debug:
+        msg: "{{ app_pods.stdout_lines }}"
+      tags: [app]
+
+    - name: Display application access information
+      debug:
+        msg: |
+          ✅ Application deployed!
+
+          🖥️  Panel GUI:    http://localhost:{{ network.panel_nodeport }}/app
+          ⚡ Spark UI:     http://localhost:{{ network.spark_ui_nodeport }}
+          📊 Grafana:      http://localhost:{{ network.grafana_nodeport }}
+      tags: [app]

@@ -1,0 +1,133 @@
+---
+# ============================================================
+# MicroK8s Installation und Konfiguration
+# ============================================================
+
+- name: Install MicroK8s via snap
+  snap:
+    name: microk8s
+    classic: yes
+    channel: "{{ microk8s_channel }}"
+  become: true
+
+- name: Add current user to microk8s group
+  user:
+    name: "{{ ansible_user }}"
+    groups: microk8s
+    append: yes
+  become: true
+
+- name: Create .kube directory
+  file:
+    path: "{{ ansible_env.HOME }}/.kube"
+    state: directory
+    mode: '0755'
+
+- name: Wait for MicroK8s to be ready
+  command: microk8s status --wait-ready
+  changed_when: false
+  timeout: 360
+  become: true
+
+- name: Enable MicroK8s addons
+  command: "microk8s enable {{ item }}"
+  loop: "{{ microk8s_addons }}"
+  register: addon_result
+  changed_when: "'is already enabled' not in addon_result.stdout"
+  become: true
+
+- name: Wait for addons to be ready
+  command: microk8s status --wait-ready
+  changed_when: false
+  timeout: 360
+  become: true
+
+- name: Configure kubectl alias
+  lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: "{{ item }}"
+    state: present
+  loop:
+    - "alias kubectl='microk8s kubectl'"
+    - "alias helm='microk8s helm3'"
+    - "alias k='microk8s kubectl'"
+
+- name: Export kubeconfig
+  shell: microk8s config > {{ ansible_env.HOME }}/.kube/config
+  become: true
+  changed_when: false
+
+- name: Set kubeconfig permissions
+  file:
+    path: "{{ ansible_env.HOME }}/.kube/config"
+    mode: '0600'
+
+- name: Set KUBECONFIG environment variable
+  lineinfile:
+    path: "{{ ansible_env.HOME }}/.bashrc"
+    line: "export KUBECONFIG={{ ansible_env.HOME }}/.kube/config"
+    state: present
+
+- name: Verify MicroK8s installation
+  command: microk8s kubectl get nodes
+  register: nodes_output
+  changed_when: false
+  become: true
+
+- name: Display cluster nodes
+  debug:
+    msg: "{{ nodes_output.stdout_lines }}"
+
+- name: Verify all system pods are running
+  command: microk8s kubectl get pods -A --no-headers
+  register: pods_output
+  changed_when: false
+  become: true
+
+- name: Display system pods
+  debug:
+    msg: "{{ pods_output.stdout_lines }}"
+
+- name: Ensure certs.d directory exists for localhost registry
+  file:
+    path: /var/snap/microk8s/current/args/certs.d/localhost:32000
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Configure localhost registry via hosts.toml
+  copy:
+    content: |
+      server = "http://localhost:32000"
+
+      [host."http://localhost:32000"]
+        capabilities = ["pull", "resolve", "push"]
+    dest: /var/snap/microk8s/current/args/certs.d/localhost:32000/hosts.toml
+    mode: '0644'
+  become: true
+  notify: restart_microk8s
+
+- name: Remove legacy mirrors block from containerd-template
+  blockinfile:
+    path: /var/snap/microk8s/current/args/containerd-template.toml
+    marker: "# {mark} ANSIBLE MANAGED - Local Registry"
+    state: absent
+  become: true
+  notify: restart_microk8s
+
+
+- name: Create StorageClass for local storage
+  shell: |
+    microk8s kubectl apply -f - <<EOF
+    apiVersion: storage.k8s.io/v1
+    kind: StorageClass
+    metadata:
+      name: local-storage
+      annotations:
+        storageclass.kubernetes.io/is-default-class: "true"
+    provisioner: microk8s.io/hostpath
+    reclaimPolicy: Retain
+    volumeBindingMode: WaitForFirstConsumer
+    EOF
+  become: true
+  changed_when: false

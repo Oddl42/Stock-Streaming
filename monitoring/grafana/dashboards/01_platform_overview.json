@@ -1,0 +1,504 @@
+{
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": "-- Grafana --",
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
+  "description": "Stock Streaming Platform - Gesamtübersicht aller Komponenten",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "id": null,
+  "links": [
+    {
+      "icon": "external link",
+      "tags": [],
+      "title": "Kafka Dashboard",
+      "type": "link",
+      "url": "/d/kafka-monitoring/kafka-monitoring"
+    },
+    {
+      "icon": "external link",
+      "title": "Spark Dashboard",
+      "type": "link",
+      "url": "/d/spark-streaming/spark-streaming"
+    }
+  ],
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "🏠 System Health",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "DOWN", "color": "red" } }, "type": "value" },
+            { "options": { "1": { "text": "UP", "color": "green" } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "auto",
+        "textMode": "auto",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "🟢 Kafka Broker",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"kafka\"}",
+          "legendFormat": "Kafka"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "DOWN" } }, "type": "value" },
+            { "options": { "1": { "text": "UP" } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      },
+      "title": "🟢 TimescaleDB",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"timescaledb\"}",
+          "legendFormat": "TimescaleDB"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "DOWN" } }, "type": "value" },
+            { "options": { "1": { "text": "UP" } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3,
+      "title": "🟢 Spark Master",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"spark-master\"}",
+          "legendFormat": "Spark"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "DOWN" } }, "type": "value" },
+            { "options": { "1": { "text": "UP" } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4,
+      "title": "🟢 WS Producer",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"ws-producer\"}",
+          "legendFormat": "WS Producer"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "STOPPED" } }, "type": "value" },
+            { "options": { "1": { "text": "RUNNING" } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5,
+      "title": "🟢 Spark Second Job",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"spark-streaming-second\"}",
+          "legendFormat": "Second Stream"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            { "options": { "0": { "text": "STOPPED" } }, "type": "value" },
+            { "options": { "1": { "text": "RUNNING" } }, "type": "value" }
+          ]
+        }
+      },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6,
+      "title": "🟢 Spark Minute Job",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "up{job=\"spark-streaming-minute\"}",
+          "legendFormat": "Minute Stream"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "📈 Durchsatz-Metriken",
+      "type": "row"
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
+            "pointSize": 5
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "id": 10,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi", "sort": "desc" }
+      },
+      "title": "📥 Messages Received (WS Producer)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(ws_producer_messages_received_total[1m])",
+          "legendFormat": "{{stream_type}} msg/s"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": {
+            "drawStyle": "line",
+            "lineWidth": 2,
+            "fillOpacity": 20
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "id": 11,
+      "options": {
+        "legend": { "displayMode": "table", "placement": "bottom", "calcs": ["mean", "max", "lastNotNull"] },
+        "tooltip": { "mode": "multi" }
+      },
+      "title": "📤 Records Written to DB (Spark)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(spark_streaming_records_written_total[1m])",
+          "legendFormat": "{{stream_type}} - {{table}}"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 80 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 14 },
+      "id": 12,
+      "title": "📊 Kafka Messages Produced (Rate)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(ws_producer_kafka_messages_produced_total[1m])",
+          "legendFormat": "{{topic}}"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 50 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 14 },
+      "id": 13,
+      "title": "🔢 Active Streaming Symbols",
+      "type": "gauge",
+      "options": {
+        "orientation": "auto",
+        "showThresholdLabels": false,
+        "showThresholdMarkers": true
+      },
+      "targets": [
+        {
+          "expr": "ws_producer_subscribed_tickers",
+          "legendFormat": "{{stream_type}}"
+        }
+      ]
+    },
+    {
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 10 }
+        }
+      },
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 14 },
+      "id": 14,
+      "title": "❌ Errors & Rejections",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(spark_streaming_records_rejected_total[5m])",
+          "legendFormat": "Rejected: {{stream_type}}"
+        },
+        {
+          "expr": "rate(ws_producer_kafka_produce_errors_total[5m])",
+          "legendFormat": "Kafka Errors: {{topic}}"
+        },
+        {
+          "expr": "rate(spark_streaming_write_errors_total[5m])",
+          "legendFormat": "DB Write Errors: {{stream_type}}"
+        }
+      ]
+    },
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 22 },
+      "id": 102,
+      "title": "🗄️ Datenbank-Übersicht",
+      "type": "row"
+    },
+    {
+      "datasource": "TimescaleDB",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 23 },
+      "id": 20,
+      "title": "📦 Rows: stock_agg_second",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "blue", "value": null }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(*) as value FROM stock_agg_second;",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "datasource": "TimescaleDB",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 23 },
+      "id": 21,
+      "title": "📦 Rows: stock_agg_minute",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "purple", "value": null }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(*) as value FROM stock_agg_minute;",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "datasource": "TimescaleDB",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 23 },
+      "id": 22,
+      "title": "📋 Unique Symbols (Second)",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "orange", "value": null }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(DISTINCT symbol) as value FROM stock_agg_second WHERE time > NOW() - INTERVAL '1 hour';",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "datasource": "TimescaleDB",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 23 },
+      "id": 23,
+      "title": "💀 Dead Letter Queue",
+      "type": "stat",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 10 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT count(*) as value FROM dead_letter_queue WHERE rejected_at > NOW() - INTERVAL '1 hour';",
+          "format": "table"
+        }
+      ]
+    },
+    {
+      "datasource": "TimescaleDB",
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 27 },
+      "id": 24,
+      "title": "📈 Ingest Rate (Rows per Minute)",
+      "type": "timeseries",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 70 }
+        }
+      },
+      "targets": [
+        {
+          "rawSql": "SELECT time_bucket('1 minute', time) AS time, count(*) AS value FROM stock_agg_second WHERE $__timeFilter(time) GROUP BY 1 ORDER BY 1;",
+          "format": "time_series"
+        }
+      ]
+    }
+  ],
+  "refresh": "10s",
+  "schemaVersion": 39,
+  "tags": ["stock-platform", "overview"],
+  "templating": { "list": [] },
+  "time": { "from": "now-1h", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "📈 Stock Platform - Overview",
+  "uid": "platform-overview",
+  "version": 1
+}

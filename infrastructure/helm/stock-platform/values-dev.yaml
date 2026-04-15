@@ -1,0 +1,59 @@
+# ============================================================
+# Dev-Override Values – Reduzierte Ressourcen
+# ============================================================
+
+kafka:
+  replicas: 1
+  storage:
+    size: 2Gi
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+  zookeeper:
+    replicas: 1
+    storage:
+      size: 1Gi
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+
+timescaledb:
+  storage:
+    size: 5Gi
+  resources:
+    requests:
+      memory: "256Mi"
+      cpu: "100m"
+    limits:
+      memory: "1Gi"
+      cpu: "500m"
+
+spark:
+  master:
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+  worker:
+    replicas: 1
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "250m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+
+monitoring:
+  prometheus:
+    storage:
+      size: 2Gi
+    retention: 2d

@@ -1,0 +1,185 @@
+# ============================================================
+# Default Helm Values – Stock Streaming Platform
+# ============================================================
+
+global:
+  namespace: stock-platform
+  imageRegistry: localhost:32000
+  imagePullPolicy: Always
+
+# ============================================================
+# Kafka (via Strimzi)
+# ============================================================
+kafka:
+  enabled: true
+  replicas: 1
+  version: "3.6.0"
+  storage:
+    size: 5Gi
+    class: microk8s-hostpath
+  resources:
+    requests:
+      memory: "1Gi"
+      cpu: "500m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  config:
+    offsetsTopicReplicationFactor: 1
+    transactionStateLogReplicationFactor: 1
+    transactionStateLogMinIsr: 1
+    defaultReplicationFactor: 1
+    minInsyncReplicas: 1
+    logRetentionHours: 48
+  zookeeper:
+    replicas: 1
+    storage:
+      size: 2Gi
+      class: microk8s-hostpath
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+  topics:
+    second:
+      name: stocks.aggregates.second
+      partitions: 8
+      replicas: 1
+      retention: 172800000
+    minute:
+      name: stocks.aggregates.minute
+      partitions: 4
+      replicas: 1
+      retention: 172800000
+  ui:
+    enabled: true
+    nodePort: 30008
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "300m"    
+
+# ============================================================
+# TimescaleDB
+# ============================================================
+timescaledb:
+  enabled: true
+  replicas: 1
+  image:
+    repository: timescale/timescaledb
+    tag: "latest-pg15"
+  storage:
+    size: 10Gi
+    class: microk8s-hostpath
+  database: stock_streaming
+  user: postgres
+  password: stockplatform2024!
+  port: 5432
+  resources:
+    requests:
+      memory: "512Mi"
+      cpu: "250m"
+    limits:
+      memory: "2Gi"
+      cpu: "1000m"
+  config:
+    maxConnections: 100
+    sharedBuffers: "256MB"
+    effectiveCacheSize: "512MB"
+    workMem: "16MB"
+
+# ============================================================
+# Spark
+# ============================================================
+spark:
+  enabled: true
+  image:
+    repository: apache/spark
+    tag: "3.5.1"
+  master:
+    replicas: 1
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1000m"
+    webUI:
+      port: 8080
+  worker:
+    replicas: 2
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "500m"
+      limits:
+        memory: "4Gi"
+        cpu: "2000m"
+    cores: 2
+    memory: "2g"
+
+# ============================================================
+# Application
+# ============================================================
+app:
+  wsProducer:
+    enabled: true
+    replicas: 1
+    image:
+      repository: stock-platform/ws-producer
+      tag: latest
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "500m"
+  sparkJob:
+    enabled: true
+    image:
+      repository: stock-platform/spark-job
+      tag: latest
+  panelGui:
+    enabled: true
+    replicas: 1
+    image:
+      repository: stock-platform/panel-gui
+      tag: latest
+    resources:
+      requests:
+        memory: "512Mi"
+        cpu: "250m"
+      limits:
+        memory: "1Gi"
+        cpu: "500m"
+    service:
+      type: NodePort
+      port: 5006
+      nodePort: 30006
+
+# ============================================================
+# Monitoring
+# ============================================================
+monitoring:
+  enabled: true
+  prometheus:
+    storage:
+      size: 5Gi
+    retention: 7d
+    scrapeInterval: 15s
+  grafana:
+    enabled: true
+    adminUser: admin
+    adminPassword: grafana2024!
+    service:
+      type: NodePort
+      port: 3000
+      nodePort: 30003

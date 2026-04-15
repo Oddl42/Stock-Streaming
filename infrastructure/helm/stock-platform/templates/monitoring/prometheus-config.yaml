@@ -1,0 +1,56 @@
+{{- if .Values.monitoring.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-additional-scrape
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "stock-platform.labels" . | nindent 4 }}
+data:
+  additional-scrape-configs.yaml: |
+    # Spark Streaming Jobs
+    - job_name: 'spark-streaming-second'
+      scrape_interval: {{ .Values.monitoring.prometheus.scrapeInterval }}
+      static_configs:
+        - targets: ['spark-job-second.{{ include "stock-platform.namespace" . }}.svc.cluster.local:8090']
+          labels:
+            app: 'spark-streaming'
+            stream_type: 'second'
+
+    - job_name: 'spark-streaming-minute'
+      scrape_interval: {{ .Values.monitoring.prometheus.scrapeInterval }}
+      static_configs:
+        - targets: ['spark-job-minute.{{ include "stock-platform.namespace" . }}.svc.cluster.local:8091']
+          labels:
+            app: 'spark-streaming'
+            stream_type: 'minute'
+
+    # WebSocket Producer
+    - job_name: 'ws-producer'
+      scrape_interval: {{ .Values.monitoring.prometheus.scrapeInterval }}
+      static_configs:
+        - targets: ['ws-producer.{{ include "stock-platform.namespace" . }}.svc.cluster.local:8092']
+          labels:
+            app: 'ws-producer'
+
+    # TimescaleDB (PostgreSQL Exporter)
+    - job_name: 'timescaledb'
+      scrape_interval: {{ .Values.monitoring.prometheus.scrapeInterval }}
+      static_configs:
+        - targets: ['timescaledb-service.{{ include "stock-platform.namespace" . }}.svc.cluster.local:9187']
+          labels:
+            app: 'timescaledb'
+
+    # Spark Master UI
+    - job_name: 'spark-master'
+      scrape_interval: 30s
+      metrics_path: /metrics/prometheus
+      static_configs:
+        - targets: ['spark-master.{{ include "stock-platform.namespace" . }}.svc.cluster.local:8080']
+
+    # Kafka (via Strimzi JMX)
+    - job_name: 'kafka'
+      scrape_interval: {{ .Values.monitoring.prometheus.scrapeInterval }}
+      static_configs:
+        - targets: ['kafka-cluster-kafka-0.kafka-cluster-kafka-brokers.kafka.svc.cluster.local:9404']
+{{- end }}

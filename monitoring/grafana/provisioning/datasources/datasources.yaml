@@ -1,0 +1,39 @@
+# ============================================================
+# Grafana Datasource Provisioning
+# ============================================================
+apiVersion: 1
+
+datasources:
+  # --- Prometheus ---
+  - name: Prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus-server.monitoring.svc.cluster.local:9090
+    isDefault: true
+    editable: false
+    jsonData:
+      timeInterval: "15s"
+      httpMethod: POST
+      exemplarTraceIdDestinations:
+        - name: traceID
+          datasourceUid: tempo
+    version: 1
+
+  # --- TimescaleDB (PostgreSQL) ---
+  - name: TimescaleDB
+    type: postgres
+    access: proxy
+    url: timescaledb-service.stock-platform.svc.cluster.local:5432
+    database: stock_streaming
+    user: postgres
+    editable: false
+    secureJsonData:
+      password: ${GRAFANA_TSDB_PASSWORD}
+    jsonData:
+      sslmode: disable
+      maxOpenConns: 10
+      maxIdleConns: 5
+      connMaxLifetime: 14400
+      postgresVersion: 1500
+      timescaledb: true
+    version: 1

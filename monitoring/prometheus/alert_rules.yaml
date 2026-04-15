@@ -1,0 +1,209 @@
+# ============================================================
+# Prometheus Alert Rules – Stock Streaming Platform
+# ============================================================
+
+groups:
+  # ==========================================
+  # Infrastructure Alerts
+  # ==========================================
+  - name: infrastructure
+    rules:
+      - alert: ServiceDown
+        expr: up == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Service {{ $labels.job }} is DOWN"
+          description: "{{ $labels.job }} has been down for more than 1 minute."
+
+      - alert: KafkaBrokerDown
+        expr: up{job="kafka"} == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Kafka Broker is DOWN"
+          description: "Kafka broker is unreachable. Streaming pipeline is broken."
+
+      - alert: TimescaleDBDown
+        expr: pg_up == 0
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "TimescaleDB is DOWN"
+          description: "Database is unreachable. Data cannot be persisted."
+
+  # ==========================================
+  # WebSocket Producer Alerts
+  # ==========================================
+  - name: ws-producer
+    rules:
+      - alert: WSProducerDisconnected
+        expr: ws_producer_connection_state == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket disconnected ({{ $labels.stream_type }})"
+          description: "WS Producer has been disconnected for >2 minutes."
+
+      - alert: WSProducerHighReconnectionRate
+        expr: rate(ws_producer_reconnections_total[10m]) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High WS reconnection rate ({{ $labels.stream_type }})"
+          description: "More than 0.5 reconnections/s over 10 minutes."
+
+      - alert: KafkaProduceErrors
+        expr: rate(ws_producer_kafka_produce_errors_total[5m]) > 0.1
+        for: 3m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka produce errors detected"
+          description: "Error rate: {{ $value }}/s for topic {{ $labels.topic }}."
+
+      - alert: KafkaQueueBacklog
+        expr: ws_producer_kafka_queue_size > 50000
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Kafka producer queue backlog"
+          description: "Queue size: {{ $value }}. Producer may be overwhelmed."
+
+      - alert: LowParseValidityRate
+        expr: |
+          sum(rate(ws_producer_aggregates_parsed_total[5m]))
+          / (sum(rate(ws_producer_aggregates_parsed_total[5m]))
+             + sum(rate(ws_producer_aggregates_invalid_total[5m])) + 0.001) < 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low message parse validity rate"
+          description: "Less than 90% of messages are valid. Current: {{ $value | humanizePercentage }}."
+
+  # ==========================================
+  # Spark Streaming Alerts
+  # ==========================================
+  - name: spark-streaming
+    rules:
+      - alert: SparkStreamingJobDown
+        expr: spark_streaming_active_streams == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "No Spark streaming jobs active"
+          description: "All streaming jobs have stopped. Data is not being processed."
+
+      - alert: HighBatchProcessingTime
+        expr: histogram_quantile(0.99, rate(spark_streaming_batch_processing_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Spark batch processing time too high ({{ $labels.stream_type }})"
+          description: "p99 batch processing time: {{ $value }}s."
+
+      - alert: HighRejectionRate
+        expr: |
+          rate(spark_streaming_records_rejected_total[5m])
+          / (rate(spark_streaming_records_written_total[5m])
+             + rate(spark_streaming_records_rejected_total[5m]) + 0.001) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High data rejection rate ({{ $labels.stream_type }})"
+          description: "More than 10% of records are being rejected."
+
+      - alert: SparkDBWriteErrors
+        expr: rate(spark_streaming_write_errors_total[5m]) > 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database write errors ({{ $labels.stream_type }})"
+          description: "Spark cannot write to TimescaleDB. Error rate: {{ $value }}/s."
+
+      - alert: NoBatchesProcessed
+        expr: increase(spark_streaming_batches_processed_total[5m]) == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "No batches processed ({{ $labels.stream_type }})"
+          description: "No micro-batches have been processed in the last 5 minutes."
+
+  # ==========================================
+  # Kafka Alerts
+  # ==========================================
+  - name: kafka
+    rules:
+      - alert: KafkaHighConsumerLag
+        expr: kafka_consumergroup_lag > 10000
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High Kafka consumer lag"
+          description: "Consumer lag for {{ $labels.topic }}[{{ $labels.partition }}]: {{ $value }}."
+
+      - alert: KafkaUnderReplicatedPartitions
+        expr: kafka_server_replicamanager_underreplicatedpartitions > 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Under-replicated Kafka partitions"
+          description: "{{ $value }} partitions are under-replicated."
+
+  # ==========================================
+  # Database Alerts
+  # ==========================================
+  - name: timescaledb
+    rules:
+      - alert: HighDBConnectionCount
+        expr: pg_stat_activity_count{state="active"} > 80
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High database connection count"
+          description: "Active connections: {{ $value }}. Max: 100."
+
+      - alert: LowCacheHitRatio
+        expr: |
+          pg_stat_database_blks_hit{datname="stock_streaming"}
+          / (pg_stat_database_blks_hit{datname="stock_streaming"}
+             + pg_stat_database_blks_read{datname="stock_streaming"} + 0.001) < 0.9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Low database cache hit ratio"
+          description: "Cache hit ratio: {{ $value | humanizePercentage }}. Consider increasing shared_buffers."
+
+      - alert: HighDeadLetterQueueRate
+        expr: rate(pg_stat_user_tables_n_tup_ins{relname="dead_letter_queue"}[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High dead letter queue insertion rate"
+          description: "DLQ is growing at {{ $value }} rows/s."
+
+      - alert: DatabaseSizeWarning
+        expr: pg_database_size_bytes{datname="stock_streaming"} > 8e9
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Database size exceeding 8GB"
+          description: "Current size: {{ $value | humanize1024 }}B. Check retention policies."

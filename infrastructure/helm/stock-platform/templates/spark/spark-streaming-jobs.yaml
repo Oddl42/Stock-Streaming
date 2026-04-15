@@ -1,0 +1,115 @@
+{{- if and .Values.spark.enabled .Values.app.sparkJob.enabled }}
+# Spark Streaming Job: Sekunden-Aggregation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-job-second
+  namespace: {{ include "stock-platform.namespace" . }}
+  labels:
+    app: spark-job-second
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-job-second
+  template:
+    metadata:
+      labels:
+        app: spark-job-second
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8090"
+    spec:
+      serviceAccountName: spark
+      containers:
+        - name: spark-job-second
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.app.sparkJob.image.repository }}:{{ .Values.app.sparkJob.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["--job", "second", "--metrics-port", "8090"]
+          ports:
+            - containerPort: 8090
+              name: metrics
+            - containerPort: 4040
+              name: spark-ui
+          env:
+            {{- include "stock-platform.commonEnv" . | nindent 12 }}
+            - name: SPARK_MASTER
+              value: "spark://spark-master:7077"
+            - name: SPARK_CHECKPOINT_PATH
+              value: "/opt/spark-checkpoints/second"
+          resources:
+            requests:
+              memory: "1Gi"
+              cpu: "500m"
+            limits:
+              memory: "2Gi"
+              cpu: "1000m"
+          volumeMounts:
+            - name: checkpoint-storage
+              mountPath: /opt/spark-checkpoints
+          livenessProbe:
+            httpGet:
+              path: /metrics
+              port: 8090
+            initialDelaySeconds: 60
+            periodSeconds: 30
+      volumes:
+        - name: checkpoint-storage
+          emptyDir:
+            sizeLimit: 1Gi
+---
+# Spark Streaming Job: Minuten-Aggregation
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: spark-job-minute
+  namespace: {{ include "stock-platform.namespace" . }}
+  labels:
+    app: spark-job-minute
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: spark-job-minute
+  template:
+    metadata:
+      labels:
+        app: spark-job-minute
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8091"
+    spec:
+      serviceAccountName: spark
+      containers:
+        - name: spark-job-minute
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.app.sparkJob.image.repository }}:{{ .Values.app.sparkJob.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          args: ["--job", "minute", "--metrics-port", "8091"]
+          ports:
+            - containerPort: 8091
+              name: metrics
+            - containerPort: 4041
+              name: spark-ui
+          env:
+            {{- include "stock-platform.commonEnv" . | nindent 12 }}
+            - name: SPARK_MASTER
+              value: "spark://spark-master:7077"
+            - name: SPARK_CHECKPOINT_PATH
+              value: "/opt/spark-checkpoints/minute"
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+          volumeMounts:
+            - name: checkpoint-storage
+              mountPath: /opt/spark-checkpoints
+      volumes:
+        - name: checkpoint-storage
+          emptyDir:
+            sizeLimit: 1Gi
+{{- end }}

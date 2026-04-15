@@ -1,0 +1,58 @@
+{{- if .Values.app.wsProducer.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ws-producer
+  namespace: {{ include "stock-platform.namespace" . }}
+  labels:
+    app: ws-producer
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.app.wsProducer.replicas }}
+  selector:
+    matchLabels:
+      app: ws-producer
+  template:
+    metadata:
+      labels:
+        app: ws-producer
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "8093"          # ✅ Metrics-Port
+        prometheus.io/path: "/metrics"
+    spec:
+      containers:
+        - name: ws-producer
+          image: "{{ .Values.global.imageRegistry }}/{{ .Values.app.wsProducer.image.repository }}:{{ .Values.app.wsProducer.image.tag }}"
+          imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+          ports:
+            - containerPort: 8092
+              name: health                   # ✅ Korrekter Name
+            - containerPort: 8093
+              name: metrics                  # ✅ Zweiter Port für Metrics
+          env:
+            {{- include "stock-platform.commonEnv" . | nindent 12 }}
+          resources:
+            requests:
+              memory: {{ .Values.app.wsProducer.resources.requests.memory }}
+              cpu: {{ .Values.app.wsProducer.resources.requests.cpu }}
+            limits:
+              memory: {{ .Values.app.wsProducer.resources.limits.memory }}
+              cpu: {{ .Values.app.wsProducer.resources.limits.cpu }}
+          livenessProbe:
+            httpGet:
+              path: /health          # ✅ Bestätigt: gibt 200 zurück
+              port: 8092
+            initialDelaySeconds: 30
+            periodSeconds: 15
+            timeoutSeconds: 5
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8092
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 3          
+{{- end }}

@@ -1,0 +1,114 @@
+{{- if .Values.timescaledb.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: timescaledb-init-scripts
+  namespace: {{ include "stock-platform.namespace" . }}
+  labels:
+    {{- include "stock-platform.labels" . | nindent 4 }}
+data:
+  01_create_extension.sql: |
+    -- Enable TimescaleDB
+    CREATE EXTENSION IF NOT EXISTS timescaledb;
+
+  02_create_tables.sql: |
+    -- Sekunden-Aggregation
+    CREATE TABLE IF NOT EXISTS stock_agg_second (
+        time                TIMESTAMPTZ      NOT NULL,
+        symbol              TEXT             NOT NULL,
+        open                DOUBLE PRECISION,
+        high                DOUBLE PRECISION,
+        low                 DOUBLE PRECISION,
+        close               DOUBLE PRECISION,
+        volume              BIGINT,
+        vwap                DOUBLE PRECISION,
+        accumulated_volume  BIGINT,
+        official_open       DOUBLE PRECISION,
+        avg_trade_size      INTEGER,
+        num_trades          INTEGER,
+        tick_start          TIMESTAMPTZ,
+        tick_end            TIMESTAMPTZ,
+        is_otc              BOOLEAN DEFAULT FALSE,
+        price_range         DOUBLE PRECISION,
+        price_change        DOUBLE PRECISION,
+        price_change_pct    DOUBLE PRECISION,
+        is_bullish          BOOLEAN,
+        body_size           DOUBLE PRECISION,
+        upper_shadow        DOUBLE PRECISION,
+        lower_shadow        DOUBLE PRECISION,
+        UNIQUE (time, symbol)
+    );
+
+    -- Minuten-Aggregation
+    CREATE TABLE IF NOT EXISTS stock_agg_minute (
+        time                TIMESTAMPTZ      NOT NULL,
+        symbol              TEXT             NOT NULL,
+        open                DOUBLE PRECISION,
+        high                DOUBLE PRECISION,
+        low                 DOUBLE PRECISION,
+        close               DOUBLE PRECISION,
+        volume              BIGINT,
+        vwap                DOUBLE PRECISION,
+        accumulated_volume  BIGINT,
+        official_open       DOUBLE PRECISION,
+        avg_trade_size      INTEGER,
+        num_trades          INTEGER,
+        tick_start          TIMESTAMPTZ,
+        tick_end            TIMESTAMPTZ,
+        is_otc              BOOLEAN DEFAULT FALSE,
+        price_range         DOUBLE PRECISION,
+        price_change        DOUBLE PRECISION,
+        price_change_pct    DOUBLE PRECISION,
+        is_bullish          BOOLEAN,
+        body_size           DOUBLE PRECISION,
+        upper_shadow        DOUBLE PRECISION,
+        lower_shadow        DOUBLE PRECISION,
+        UNIQUE (time, symbol)
+    );
+
+    -- Dead Letter Queue
+    CREATE TABLE IF NOT EXISTS dead_letter_queue (
+        id                  BIGSERIAL PRIMARY KEY,
+        time                TIMESTAMPTZ,
+        symbol              TEXT,
+        open                DOUBLE PRECISION,
+        high                DOUBLE PRECISION,
+        low                 DOUBLE PRECISION,
+        close               DOUBLE PRECISION,
+        volume              BIGINT,
+        vwap                DOUBLE PRECISION,
+        rejection_reason    TEXT,
+        rejected_at         TIMESTAMPTZ DEFAULT NOW(),
+        batch_id            INTEGER
+    );
+
+  03_create_hypertables.sql: |
+    -- Hypertables
+    SELECT create_hypertable('stock_agg_second', 'time', if_not_exists => TRUE, migrate_data => TRUE);
+    SELECT create_hypertable('stock_agg_minute', 'time', if_not_exists => TRUE, migrate_data => TRUE);
+
+    -- Indizes
+    CREATE INDEX IF NOT EXISTS idx_second_symbol_time ON stock_agg_second (symbol, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_minute_symbol_time ON stock_agg_minute (symbol, time DESC);
+    CREATE INDEX IF NOT EXISTS idx_second_symbol ON stock_agg_second (symbol);
+    CREATE INDEX IF NOT EXISTS idx_minute_symbol ON stock_agg_minute (symbol);
+
+    -- Retention (2 Tage)
+    SELECT add_retention_policy('stock_agg_second', INTERVAL '2 days', if_not_exists => TRUE);
+    SELECT add_retention_policy('stock_agg_minute', INTERVAL '2 days', if_not_exists => TRUE);
+
+    -- Compression
+    ALTER TABLE stock_agg_second SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'symbol',
+        timescaledb.compress_orderby = 'time DESC'
+    );
+    SELECT add_compression_policy('stock_agg_second', INTERVAL '1 day', if_not_exists => TRUE);
+
+    ALTER TABLE stock_agg_minute SET (
+        timescaledb.compress,
+        timescaledb.compress_segmentby = 'symbol',
+        timescaledb.compress_orderby = 'time DESC'
+    );
+    SELECT add_compression_policy('stock_agg_minute', INTERVAL '1 day', if_not_exists => TRUE);
+{{- end }}

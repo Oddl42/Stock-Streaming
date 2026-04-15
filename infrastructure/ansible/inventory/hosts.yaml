@@ -1,0 +1,13 @@
+---
+all:
+  hosts:
+    stock-platform-vm:
+      ansible_host: 127.0.0.1
+      ansible_connection: local
+      ansible_python_interpreter: /usr/bin/python3
+  children:
+    k8s_nodes:
+      hosts:
+        stock-platform-vm:
+  vars:
+    ansible_user: "{{ lookup('env', 'USER') }}"

@@ -1,0 +1,10 @@
+---
+- name: Install System Prerequisites
+  hosts: k8s_nodes
+  become: true
+  roles:
+    - prerequisites
+  post_tasks:
+    - name: Summary
+      debug:
+        msg: "✅ Prerequisites installed successfully!"

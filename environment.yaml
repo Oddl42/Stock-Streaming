@@ -1,0 +1,71 @@
+name: stock-streaming
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  # Python
+  - python=3.11
+  
+  # Panel / HoloViz / Bokeh
+  - panel>=1.3
+  - bokeh>=3.3
+  - holoviews
+  - param
+  - colorcet
+  
+  # Data Processing
+  - pandas
+  - numpy
+  - pyarrow
+  
+  # Database
+  - psycopg2
+  - sqlalchemy>=2.0
+  - alembic
+  
+  # Kafka (confluent-kafka wird über pip installiert, s.u.)
+  - kafka-python
+  
+  # Spark (PySpark)
+  - pyspark=3.5.1
+  - py4j
+  
+  # WebSocket
+  - websocket-client
+  - websockets
+  - aiohttp
+  
+  # HTTP / REST
+  - requests
+  - httpx
+  
+  # Configuration
+  - python-dotenv
+  - pyyaml
+  
+  # Monitoring
+  - prometheus_client
+  
+  # Testing
+  - pytest
+  - pytest-asyncio
+  - pytest-cov
+  
+  # Dev Tools
+  - black
+  - flake8
+  - mypy
+  - ipython
+  - jupyter
+  
+  # Ansible (für Infrastruktur)
+  - ansible
+
+  # pip explizit als Conda-Dependency auflisten
+  - pip
+
+  # pip-only packages
+  - pip:
+    - confluent-kafka             # Aktuelle Version mit Python 3.11 Support
+    - massive                     # Massive.com Python Client
+    - timescale_vector            # TimescaleDB Utilities

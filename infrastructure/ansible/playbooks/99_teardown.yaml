@@ -1,0 +1,186 @@
+---
+# ============================================================
+# TEARDOWN: Alles abräumen
+# ============================================================
+- name: Teardown Stock Streaming Platform
+  hosts: k8s_nodes
+  become: true
+  vars_prompt:
+    - name: confirm_teardown
+      prompt: "⚠️  WARNUNG: Dies löscht ALLE Ressourcen! Eingabe 'YES' zum Bestätigen"
+      private: no
+  tasks:
+
+    - name: Verify confirmation
+      fail:
+        msg: "Teardown abgebrochen. Eingabe war nicht 'YES'."
+      when: confirm_teardown != "YES"
+
+    # ---- Schritt 1: Custom Resources ZUERST löschen (solange Operator noch läuft!) ----
+    - name: Delete Strimzi Kafka custom resources
+      command: >
+        microk8s kubectl delete kafka,kafkatopic,kafkaconnect,kafkauser,kafkabridge
+        --all -n kafka --ignore-not-found=true --timeout=60s
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Delete custom resources in project namespace
+      command: >
+        microk8s kubectl delete kafka,kafkatopic,kafkaconnect,kafkauser
+        --all -n {{ project_namespace }} --ignore-not-found=true --timeout=60s
+      ignore_errors: yes
+      changed_when: false
+
+    # ---- Schritt 2: Helm Releases deinstallieren ----
+    - name: Uninstall Helm releases
+      kubernetes.core.helm:
+        name: "{{ item }}"
+        state: absent
+        release_namespace: "{{ project_namespace }}"
+      loop:
+        - stock-platform-app
+        - stock-platform-monitoring
+        - stock-platform-spark
+        - stock-platform-tsdb
+        - stock-platform-kafka
+      ignore_errors: yes
+
+    - name: Uninstall Strimzi Operator
+      kubernetes.core.helm:
+        name: strimzi-kafka-operator
+        state: absent
+        release_namespace: kafka
+      ignore_errors: yes
+
+    # ---- Schritt 3: Alle Ressourcen in den Namespaces löschen (BEVOR der Namespace gelöscht wird) ----
+    - name: Force delete all resources in namespaces
+      shell: |
+        for ns in {{ project_namespace }} kafka; do
+          # Alle Ressourcen im Namespace löschen
+          microk8s kubectl delete all --all -n "$ns" --force --grace-period=0 2>/dev/null || true
+          
+          # Secrets, ConfigMaps, PVCs etc. löschen
+          for rtype in secret configmap pvc serviceaccount rolebinding role; do
+            microk8s kubectl delete "$rtype" --all -n "$ns" --force --grace-period=0 2>/dev/null || true
+          done
+          
+          # CRDs wie Kafka-Ressourcen forciert löschen
+          for resource in $(microk8s kubectl api-resources --verbs=list --namespaced -o name 2>/dev/null); do
+            microk8s kubectl delete "$resource" --all -n "$ns" --force --grace-period=0 2>/dev/null || true
+          done
+        done
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+      changed_when: false
+
+    # ---- Schritt 3b: Finalizer von ALLEN verbleibenden Ressourcen entfernen ----
+    - name: Remove finalizers from ALL stuck resources
+      shell: |
+        for ns in {{ project_namespace }} kafka; do
+          microk8s kubectl get all -n "$ns" -o json 2>/dev/null | \
+            jq -r '.items[] | select(.metadata.finalizers != null and (.metadata.finalizers | length > 0)) | "\(.kind)/\(.metadata.name)"' | \
+            while read res; do
+              microk8s kubectl patch "$res" -n "$ns" \
+                --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
+            done
+          
+          # Auch CRDs berücksichtigen
+          for resource in $(microk8s kubectl api-resources --verbs=list --namespaced -o name 2>/dev/null); do
+            microk8s kubectl get "$resource" -n "$ns" -o json 2>/dev/null | \
+              jq -r '.items[] | select(.metadata.finalizers != null) | .metadata.name' | \
+              while read name; do
+                microk8s kubectl patch "$resource/$name" -n "$ns" \
+                  --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
+              done
+          done
+        done
+      args:
+        executable: /bin/bash
+      ignore_errors: yes
+      changed_when: false
+
+    # ---- Schritt 4: Namespaces löschen – MIT ignore_errors! ----
+    - name: Delete namespaces
+      command: "microk8s kubectl delete namespace {{ item }} --ignore-not-found=true --timeout=120s"
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+      changed_when: false
+      ignore_errors: yes          # ← DAS HAT GEFEHLT!
+
+    # ---- Schritt 5: Stuck Namespaces via API forciert entfernen ----
+    - name: Force-remove stuck terminating namespaces via API
+      shell: |
+        NS_STATUS=$(microk8s kubectl get namespace {{ item }} -o jsonpath='{.status.phase}' 2>/dev/null)
+        if [ "$NS_STATUS" = "Terminating" ]; then
+          echo "Namespace {{ item }} stuck in Terminating – forcing removal..."
+          
+          # Zuerst alle Finalizer von Ressourcen im Namespace entfernen
+          microk8s kubectl get all -n {{ item }} -o name 2>/dev/null | while read res; do
+            microk8s kubectl patch "$res" -n {{ item }} \
+              --type=merge -p '{"metadata":{"finalizers":[]}}' 2>/dev/null || true
+          done
+          
+          # Dann Namespace-Finalizer entfernen
+          microk8s kubectl get namespace {{ item }} -o json | \
+            jq '.spec.finalizers = []' | \
+            microk8s kubectl replace --raw "/api/v1/namespaces/{{ item }}/finalize" -f -
+        else
+          echo "Namespace {{ item }} not found or already deleted."
+        fi
+      args:
+        executable: /bin/bash
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+      ignore_errors: yes
+      changed_when: false
+
+    # ---- Schritt 6: Verifizieren, dass Namespaces wirklich weg sind ----
+    - name: Verify namespaces are deleted
+      command: "microk8s kubectl get namespace {{ item }}"
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+      register: ns_check
+      failed_when: ns_check.rc == 0
+      ignore_errors: yes
+      changed_when: false
+
+    # ---- Schritt 7: Aufräumen ----
+    - name: Clean up PVCs
+      command: >
+        microk8s kubectl delete pvc --all -n {{ item }} --ignore-not-found=true
+      loop:
+        - "{{ project_namespace }}"
+        - kafka
+      changed_when: false
+      ignore_errors: yes
+
+    - name: Clean up local Docker images
+      docker_image:
+        name: "{{ item }}"
+        state: absent
+      loop:
+        - "{{ images.ws_producer.name }}:{{ images.ws_producer.tag }}"
+        - "{{ images.spark_job.name }}:{{ images.spark_job.tag }}"
+        - "{{ images.panel_gui.name }}:{{ images.panel_gui.tag }}"
+      ignore_errors: yes
+
+    - name: Clean up Spark checkpoints
+      file:
+        path: /tmp/spark-checkpoints
+        state: absent
+
+    - name: Reset MicroK8s registry addon
+      shell: |
+        microk8s disable registry
+        sleep 5
+        microk8s enable registry
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Teardown complete
+      debug:
+        msg: "🗑️  Teardown complete. Alle Ressourcen wurden entfernt."

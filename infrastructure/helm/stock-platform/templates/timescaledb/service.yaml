@@ -1,0 +1,23 @@
+{{- if .Values.timescaledb.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: timescaledb-service
+  namespace: {{ include "stock-platform.namespace" . }}
+  labels:
+    app: timescaledb
+    {{- include "stock-platform.labels" . | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - port: {{ .Values.timescaledb.port }}
+      targetPort: postgresql
+      protocol: TCP
+      name: postgresql
+    - port: 9187
+      targetPort: metrics
+      protocol: TCP
+      name: metrics
+  selector:
+    app: timescaledb
+{{- end }}
