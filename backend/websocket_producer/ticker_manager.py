@@ -34,7 +34,7 @@ class TickerManager:
     - Batching notwendig bei >100 Tickern
     """
 
-    MAX_TICKERS_PER_SUBSCRIBE = 100  # Max Ticker pro Subscribe-Call
+    MAX_TICKERS_PER_SUBSCRIBE = 510  # Max Ticker pro Subscribe-Call
 
     def __init__(self):
         self._active_tickers: list[str] = []

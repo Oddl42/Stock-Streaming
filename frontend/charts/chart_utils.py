@@ -19,7 +19,9 @@ from frontend.styles.theme import CHART_COLORS
 
 
 def create_empty_source() -> ColumnDataSource:
-    """Erstellt eine leere ColumnDataSource mit dem korrekten Schema."""
+    """
+    Erstellt eine leere ColumnDataSource mit dem korrekten Schema.
+    """
     return ColumnDataSource(data={
         "time": [],
         "open": [],
@@ -55,10 +57,6 @@ def get_crosshair_tool() -> CrosshairTool:
 def get_datetime_formatter() -> DatetimeTickFormatter:
     """
     Erstellt einen DateTime-Formatter für die X-Achse.
-
-    Bokeh 3.8.x erwartet einzelne Strings (nicht Listen!).
-    Ältere Bokeh-3.x-Versionen akzeptierten Listen,
-    ab 3.8.x sind einzelne Strings korrekt.
     """
     return DatetimeTickFormatter(
         seconds="%H:%M:%S",
@@ -74,10 +72,6 @@ def get_datetime_formatter() -> DatetimeTickFormatter:
 def calculate_candle_width(stream_type: str = "second") -> float:
     """
     Berechne Kerzenbreite basierend auf Stream-Typ.
-
-    Bokeh arbeitet bei x_axis_type='datetime' intern mit
-    Millisekunden seit Epoch. Die Breite muss deshalb in
-    Millisekunden angegeben werden.
     """
     if stream_type == "second":
         return 800       # 0.8 Sekunden in ms

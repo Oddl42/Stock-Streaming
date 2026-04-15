@@ -115,7 +115,7 @@
           - value: "timescaledb.enabled=false"
           - value: "spark.enabled=false"
           - value: "app.wsProducer.enabled=false"
-          - value: "app.sparkJob.enabled=false"
+          - value: "app.sparkJob.enabled=true"
           - value: "app.panelGui.enabled=false"
           - value: "monitoring.enabled=false"
       tags: [kafka]

@@ -7,215 +7,141 @@ Created on Wed Feb 25 22:15:30 2026
 """
 
 """
-Aktualisierte Stream Callbacks – Nutzt den StreamJobManager
-für die Spark Streaming Jobs.
+Stream Callbacks – Leichtgewichtige Version für die GUI.
 
-Hinweis: Backend-Imports sind mit try/except abgesichert,
-da im Panel-GUI-Container weder pyspark noch aiohttp
-installiert sind. Diese Komponenten laufen in separaten Pods.
+ARCHITEKTUR:
+    Die GUI startet KEINE eigenen Backend-Prozesse!
+    - WebSocket Producer läuft als standalone Prozess (via run_local.sh)
+    - Spark Streaming Jobs laufen als standalone Prozesse (via run_local.sh)
+    - Die GUI liest nur aus TimescaleDB und zeigt Daten an
+
+    Der "Start Stream" Button in der GUI:
+    → Startet das periodische Chart-Update (liest DB alle 2s)
+    → Startet NICHT den Producer oder Spark!
+
+    Der "Stop Stream" Button in der GUI:
+    → Stoppt das periodische Chart-Update
+    → Stoppt NICHT den Producer oder Spark!
+
+WARUM:
+    1. Producer belegt Ports 8092/8093 → zweite Instanz crasht
+    2. Spark nutzt signal() → funktioniert nur im Main-Thread
+    3. Saubere Trennung: Backend = Daten-Pipeline, GUI = Anzeige
 """
 
 import logging
 
 logger = logging.getLogger(__name__)
 
-# --- Spark Streaming (benötigt pyspark) ---
-try:
-    from backend.spark_streaming.stream_job_manager import stream_job_manager
-except ImportError as e:
-    stream_job_manager = None
-    logger.warning(f"stream_job_manager nicht verfügbar: {e}")
-
-# --- WebSocket Producer (benötigt aiohttp) ---
-try:
-    from backend.websocket_producer.stream_manager import StreamManager, StreamType
-    WS_PRODUCER_AVAILABLE = True
-except ImportError as e:
-    StreamManager = None
-    StreamType = None
-    WS_PRODUCER_AVAILABLE = False
-    logger.warning(f"WebSocket Producer nicht verfügbar: {e}")
-
-# --- Settings (sollte immer verfügbar sein) ---
-from config.settings import settings
-
 
 class StreamCallbackHandler:
     """
-    Verbindet GUI-Events mit Backend:
-    1. WebSocket Producer (Massive.com → Kafka)
-    2. Spark Streaming Job (Kafka → TimescaleDB)
+    Leichtgewichtiger Stream-Handler für die GUI.
 
-    Im Panel-GUI-Container laufen beide Backends in separaten Pods.
-    Die GUI zeigt nur Daten aus TimescaleDB an.
+    Prüft nur, ob die externen Prozesse vermutlich laufen
+    (Kafka erreichbar, DB hat aktuelle Daten), startet aber
+    KEINE eigenen Backend-Prozesse.
     """
 
     def __init__(self):
-        self._ws_stream_manager = None
-        self._is_initialized = False
-
-    def initialize(self):
-        """Initialisiert den WebSocket Producer (falls verfügbar)."""
-        if self._is_initialized:
-            return
-
-        if not WS_PRODUCER_AVAILABLE:
-            logger.warning(
-                "WebSocket Producer nicht verfügbar (aiohttp fehlt). "
-                "Producer läuft vermutlich in separatem Pod."
-            )
-            self._is_initialized = True
-            return
-
-        kafka_config = {
-            "bootstrap.servers": settings.KAFKA_BOOTSTRAP_SERVERS,
-            "client.id": "panel-gui-producer",
-            "acks": "all",
-        }
-        self._ws_stream_manager = StreamManager(
-            api_key=settings.MASSIVE_API_KEY,
-            kafka_config=kafka_config,
-        )
-        self._is_initialized = True
+        self._active_stream_type: str = ""
+        self._active_tickers: list[str] = []
 
     def on_stream_start(self, stream_type_str: str, tickers: list[str]):
         """
-        Startet den gesamten Streaming-Stack:
-        1. Spark Streaming Job (Kafka → DB)
-        2. WebSocket Producer (Massive.com → Kafka)
-        """
-        if not self._is_initialized:
-            self.initialize()
+        Wird aufgerufen wenn der "Start" Button geklickt wird.
 
+        Startet KEINE Backend-Prozesse!
+        Speichert nur den aktuellen Stream-Typ und die Ticker.
+        Das periodische Chart-Update wird in main_layout.py gestartet.
+        """
         stream_type = (
             "second" if stream_type_str in ("Sekunden", "second")
             else "minute"
         )
 
-        # 1. Spark Streaming Job starten (nur wenn verfügbar)
-        if stream_job_manager is not None:
-            logger.info(f"Starting Spark {stream_type} streaming job...")
-            spark_started = stream_job_manager.start_job(stream_type)
-            if not spark_started:
-                logger.error("Failed to start Spark streaming job!")
-                raise RuntimeError("Spark job failed to start")
-        else:
-            logger.warning(
-                "stream_job_manager nicht verfügbar (pyspark fehlt). "
-                "Spark-Job wird übersprungen – läuft vermutlich in separatem Pod."
-            )
-
-        # 2. WebSocket Producer starten (nur wenn verfügbar)
-        if WS_PRODUCER_AVAILABLE and self._ws_stream_manager is not None:
-            logger.info(f"Starting WebSocket producer for {len(tickers)} tickers...")
-            ws_type = (
-                StreamType.SECOND if stream_type == "second"
-                else StreamType.MINUTE
-            )
-            self._ws_stream_manager.set_tickers(tickers)
-
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(
-                        self._ws_stream_manager.start_stream(ws_type)
-                    )
-                else:
-                    loop.run_until_complete(
-                        self._ws_stream_manager.start_stream(ws_type)
-                    )
-            except Exception as e:
-                logger.error(f"WebSocket producer failed: {e}")
-                if stream_job_manager is not None:
-                    stream_job_manager.stop_job(stream_type)
-                raise
-        else:
-            logger.warning(
-                "WebSocket Producer nicht verfügbar (aiohttp fehlt). "
-                "Producer läuft vermutlich in separatem Pod."
-            )
+        self._active_stream_type = stream_type
+        self._active_tickers = tickers
 
         logger.info(
-            f"✅ Full streaming stack started: "
-            f"{stream_type} with {len(tickers)} tickers"
+            f"GUI stream started: {stream_type} with {len(tickers)} tickers. "
+            f"(Backend-Prozesse laufen extern via run_local.sh)"
         )
+
+        # Optional: Prüfe ob Backend-Prozesse laufen
+        self._check_backend_health()
 
     def on_stream_stop(self, stream_type_str: str):
         """
-        Stoppt den gesamten Stack:
-        1. WebSocket Producer stoppen
-        2. Spark Streaming Job stoppen
+        Wird aufgerufen wenn der "Stop" Button geklickt wird.
+
+        Stoppt KEINE Backend-Prozesse!
+        Das periodische Chart-Update wird in main_layout.py gestoppt.
         """
         stream_type = (
             "second" if stream_type_str in ("Sekunden", "second")
             else "minute"
         )
 
-        # 1. WebSocket Producer stoppen (nur wenn verfügbar)
-        if WS_PRODUCER_AVAILABLE and self._ws_stream_manager is not None:
-            ws_type = (
-                StreamType.SECOND if stream_type == "second"
-                else StreamType.MINUTE
-            )
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(
-                        self._ws_stream_manager.stop_stream(ws_type)
-                    )
-                else:
-                    loop.run_until_complete(
-                        self._ws_stream_manager.stop_stream(ws_type)
-                    )
-            except Exception as e:
-                logger.error(f"Error stopping WebSocket producer: {e}")
+        self._active_stream_type = ""
+        self._active_tickers = []
 
-        # 2. Spark Job stoppen (nur wenn verfügbar)
-        if stream_job_manager is not None:
-            stream_job_manager.stop_job(stream_type)
-        else:
-            logger.warning(
-                "stream_job_manager nicht verfügbar – "
-                "Spark-Job läuft in separatem Pod und muss dort gestoppt werden."
-            )
-
-        logger.info(f"🛑 Full streaming stack stopped: {stream_type}")
+        logger.info(
+            f"GUI stream stopped: {stream_type}. "
+            f"(Backend-Prozesse laufen weiter via run_local.sh)"
+        )
 
     def on_shutdown(self):
-        """Cleanup."""
-        if WS_PRODUCER_AVAILABLE and self._ws_stream_manager is not None:
-            import asyncio
-            try:
-                loop = asyncio.get_event_loop()
-                loop.run_until_complete(
-                    self._ws_stream_manager.stop_all()
+        """Cleanup bei Session-Ende. Stoppt keine externen Prozesse."""
+        self._active_stream_type = ""
+        self._active_tickers = []
+        logger.info("GUI session cleanup complete.")
+
+    def _check_backend_health(self):
+        """
+        Prüft ob die externen Backend-Prozesse vermutlich laufen.
+        Nur Logging — blockiert oder crasht nicht.
+        """
+        try:
+            import socket
+
+            # Kafka erreichbar?
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex(("localhost", 29092))
+            sock.close()
+            if result == 0:
+                logger.info("✅ Kafka ist erreichbar (localhost:29092)")
+            else:
+                logger.warning(
+                    "⚠️ Kafka nicht erreichbar! "
+                    "Ist 'run_local.sh infra' gestartet?"
                 )
-            except Exception:
-                pass
 
-        if stream_job_manager is not None:
-            stream_job_manager.stop_all()
+            # TimescaleDB erreichbar?
+            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            sock.settimeout(2)
+            result = sock.connect_ex(("localhost", 5432))
+            sock.close()
+            if result == 0:
+                logger.info("✅ TimescaleDB ist erreichbar (localhost:5432)")
+            else:
+                logger.warning(
+                    "⚠️ TimescaleDB nicht erreichbar! "
+                    "Ist 'run_local.sh infra' gestartet?"
+                )
 
-        logger.info("Full shutdown complete.")
+        except Exception as e:
+            logger.debug(f"Health check error (harmlos): {e}")
 
     def get_health(self) -> dict:
-        """Health-Status des gesamten Stacks."""
-        health = {"panel_gui": "running"}
-
-        if stream_job_manager is not None:
-            health["spark"] = stream_job_manager.health_check()
-        else:
-            health["spark"] = {"status": "external", "reason": "runs in separate pod"}
-
-        if WS_PRODUCER_AVAILABLE:
-            health["ws_producer"] = "available"
-        else:
-            health["ws_producer"] = {"status": "external", "reason": "runs in separate pod"}
-
-        return health
-
+        """Health-Status."""
+        return {
+            "panel_gui": "running",
+            "active_stream": self._active_stream_type or "none",
+            "active_tickers": len(self._active_tickers),
+            "backend": "external (run_local.sh)",
+        }
 
 # Singleton
 stream_callback_handler = StreamCallbackHandler()

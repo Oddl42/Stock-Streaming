@@ -13,13 +13,21 @@ set -e
 #   - .env Datei mit API Key konfiguriert
 #
 # Verwendung:
-#   ./scripts/run_local.sh              # Alles starten
+#   ./scripts/run_local.sh              # Alles starten (Top 10)
+#   ./scripts/run_local.sh all          # Alles starten (Top 10)
+#   ./scripts/run_local.sh all --all    # Alles starten (ALLE S&P 500)
 #   ./scripts/run_local.sh gui          # Nur GUI
-#   ./scripts/run_local.sh producer     # Nur WS Producer
+#   ./scripts/run_local.sh producer     # Nur WS Producer (Top 10)
+#   ./scripts/run_local.sh producer --all  # Nur WS Producer (alle)
 #   ./scripts/run_local.sh spark        # Nur Spark Jobs
 #   ./scripts/run_local.sh infra        # Nur Docker Compose
 #   ./scripts/run_local.sh init         # DB initialisieren + Tickers seeden
 #   ./scripts/run_local.sh stop         # Alles stoppen
+#   ./scripts/run_local.sh status       # Status anzeigen
+#
+# Umgebungsvariablen:
+#   TICKER_MODE=top10|all|custom        # Default: top10
+#   TICKER_SYMBOLS="AAPL,MSFT,GOOGL"   # Nur bei TICKER_MODE=custom
 # ============================================================
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -27,8 +35,7 @@ PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
 
 cd "$PROJECT_DIR"
 
-# ✅ FIX: PYTHONPATH global setzen, damit alle Python-Prozesse
-# die Module (frontend, backend, config) finden koennen
+# PYTHONPATH global setzen
 export PYTHONPATH="${PROJECT_DIR}:${PYTHONPATH}"
 
 if [[ -f "${CONDA_PREFIX}/bin/java" ]]; then
@@ -45,6 +52,56 @@ NC='\033[0m'
 # PID-Datei fuer Background-Prozesse
 PID_DIR="/tmp/stock-platform-pids"
 mkdir -p "$PID_DIR"
+
+# ============================================================
+# Ticker-Modus bestimmen
+# ============================================================
+# Prioritaet: CLI-Argument > Umgebungsvariable > Default (top10)
+
+TICKER_MODE="${TICKER_MODE:-top10}"
+
+# CLI-Argumente parsen (--all, --top10, --symbols)
+parse_ticker_args() {
+    for arg in "$@"; do
+        case "$arg" in
+            --all)
+                TICKER_MODE="all"
+                ;;
+            --top10)
+                TICKER_MODE="top10"
+                ;;
+            --symbols=*)
+                TICKER_MODE="custom"
+                TICKER_SYMBOLS="${arg#*=}"
+                ;;
+        esac
+    done
+}
+
+# Alle Argumente nach dem Command parsen
+parse_ticker_args "${@:2}"
+
+get_producer_ticker_args() {
+    case "$TICKER_MODE" in
+        all)
+            echo "--all-sp500"
+            ;;
+        custom)
+            echo "--symbols ${TICKER_SYMBOLS}"
+            ;;
+        top10|*)
+            echo "--top10"
+            ;;
+    esac
+}
+
+get_ticker_description() {
+    case "$TICKER_MODE" in
+        all)    echo "Alle S&P 500 (~502 Ticker)" ;;
+        custom) echo "Custom: ${TICKER_SYMBOLS}" ;;
+        top10)  echo "Top 10" ;;
+    esac
+}
 
 # ============================================================
 # Hilfsfunktionen
@@ -147,18 +204,24 @@ init_db() {
 start_producer() {
     echo -e "${CYAN}═══ WebSocket Producer starten ═══${NC}"
 
+    local ticker_args=$(get_producer_ticker_args)
+    local ticker_desc=$(get_ticker_description)
+
     # Pruefe ob bereits laeuft
     if [[ -f "$PID_DIR/ws-producer.pid" ]]; then
         local pid=$(cat "$PID_DIR/ws-producer.pid")
         if kill -0 "$pid" 2>/dev/null; then
             echo -e "${YELLOW}WS Producer laeuft bereits (PID: $pid)${NC}"
+            echo -e "${YELLOW}Stoppe zuerst: ./scripts/run_local.sh stop${NC}"
             return
         fi
     fi
 
-    # ✅ PYTHONPATH ist global gesetzt
+    echo -e "   Ticker-Modus: ${GREEN}${ticker_desc}${NC}"
+    echo -e "   Producer-Args: ${ticker_args}"
+
     python -m backend.websocket_producer.entrypoint \
-        --stream second --top10 --log-level INFO \
+        --stream second --all --log-level INFO \
         &> /tmp/stock-platform-ws-producer.log &
 
     echo $! > "$PID_DIR/ws-producer.pid"
@@ -176,7 +239,6 @@ start_spark() {
             echo -e "${YELLOW}Spark Second Job laeuft bereits (PID: $pid)${NC}"
         fi
     else
-        # ✅ PYTHONPATH ist global gesetzt
         python -m backend.spark_streaming.entrypoint \
             --job second --log-level INFO \
             &> /tmp/stock-platform-spark-second.log &
@@ -192,7 +254,6 @@ start_spark() {
             echo -e "${YELLOW}Spark Minute Job laeuft bereits (PID: $pid)${NC}"
         fi
     else
-        # ✅ PYTHONPATH ist global gesetzt
         python -m backend.spark_streaming.entrypoint \
             --job minute --log-level INFO \
             &> /tmp/stock-platform-spark-minute.log &
@@ -216,7 +277,6 @@ start_gui() {
         fi
     fi
 
-    # ✅ PYTHONPATH ist global gesetzt – Panel findet jetzt frontend/backend/config Module
     panel serve frontend/app.py \
         --port 5006 \
         --address 0.0.0.0 \
@@ -242,7 +302,7 @@ stop_all() {
             if kill -0 "$pid" 2>/dev/null; then
                 echo "   Stoppe $name (PID: $pid)..."
                 kill "$pid" 2>/dev/null || true
-                sleep 1
+                sleep 2
                 kill -9 "$pid" 2>/dev/null || true
             fi
             rm -f "$pidfile"
@@ -307,6 +367,8 @@ case "$COMMAND" in
         check_docker
 
         echo ""
+        echo -e "   Ticker-Modus: ${CYAN}$(get_ticker_description)${NC}"
+        echo ""
         start_infra
         echo ""
         init_db
@@ -321,6 +383,7 @@ case "$COMMAND" in
         echo -e "${GREEN}╔══════════════════════════════════════════════╗${NC}"
         echo -e "${GREEN}║  ✅ Alle Services gestartet!                ║${NC}"
         echo -e "${GREEN}╠══════════════════════════════════════════════╣${NC}"
+        echo -e "${GREEN}║  Ticker:   $(printf '%-33s' "$(get_ticker_description)")║${NC}"
         echo -e "${GREEN}║  GUI:      http://localhost:5006/app         ║${NC}"
         echo -e "${GREEN}║  Spark:    http://localhost:8080              ║${NC}"
         echo -e "${GREEN}║  Kafka UI: http://localhost:8088              ║${NC}"
@@ -343,6 +406,7 @@ case "$COMMAND" in
     producer)
         check_conda
         check_env_file
+        parse_ticker_args "${@:2}"
         start_producer
         ;;
 
@@ -383,7 +447,7 @@ case "$COMMAND" in
     *)
         echo -e "${CYAN}Usage: $0 {all|infra|init|producer|spark|gui|stop|stop-all|status|logs}${NC}"
         echo ""
-        echo "  all       Alles starten (Default)"
+        echo "  all       Alles starten (Default: Top 10 Ticker)"
         echo "  infra     Nur Docker Compose (Kafka, TimescaleDB, Spark)"
         echo "  init      Datenbank initialisieren + Tickers seeden"
         echo "  producer  Nur WebSocket Producer"
@@ -393,6 +457,17 @@ case "$COMMAND" in
         echo "  stop-all  Alles stoppen (inkl. Docker Compose)"
         echo "  status    Status anzeigen"
         echo "  logs      Logs anzeigen (producer|spark|gui|all)"
+        echo ""
+        echo -e "${YELLOW}Ticker-Optionen (nach dem Kommando):${NC}"
+        echo "  --top10              Top 10 nach Marktkapitalisierung (Default)"
+        echo "  --all                Alle S&P 500 Ticker (~502)"
+        echo "  --symbols=AAPL,MSFT  Bestimmte Ticker"
+        echo ""
+        echo -e "${YELLOW}Beispiele:${NC}"
+        echo "  $0 all --top10       Alles mit Top 10"
+        echo "  $0 all --all         Alles mit allen S&P 500"
+        echo "  $0 producer --all    Nur Producer mit allen Tickern"
+        echo "  $0 producer --symbols=AAPL,MSFT,GOOGL"
         exit 1
         ;;
 esac

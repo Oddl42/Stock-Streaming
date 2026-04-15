@@ -142,7 +142,7 @@ class WebSocketRateLimiter:
         )
         # Subscription: Max 100 Subscriptions pro Sekunde
         self.subscription_limiter = TokenBucketRateLimiter(
-            rate=100.0, max_tokens=500.0
+            rate=510.0, max_tokens=1000.0
         )
         # Message (outgoing): Max 50 Messages pro Sekunde
         self.message_limiter = TokenBucketRateLimiter(

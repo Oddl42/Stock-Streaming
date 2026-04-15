@@ -91,7 +91,7 @@ spark:
 
 # --- App ---
 app:
-  massive_api_key: "{{ lookup('env', 'MASSIVE_API_KEY') | default('YOUR_API_KEY', true) }}"
+  massive_api_key: "{{ lookup('env', 'MASSIVE_API_KEY') | default('YOUR_KEY', true) }}"
   panel_port: 5006
   panel_replicas: 1
   ws_producer_replicas: 1

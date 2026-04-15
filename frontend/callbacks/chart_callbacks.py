@@ -6,7 +6,9 @@ Created on Wed Feb 25 22:16:05 2026
 @author: twi
 """
 
-"""Callbacks für periodische Chart-Updates (alle 2 Sekunden)."""
+"""
+Callbacks für periodische Chart-Updates (alle 2 Sekunden).
+"""
 
 import panel as pn
 import logging
@@ -25,12 +27,8 @@ class ChartCallbackHandler:
     Verwaltet das periodische Update des Charts.
 
     ARCHITEKTUR:
-    - Wird pro Session NEU erstellt (in create_main_layout())
-    - KEIN Modul-Level Singleton mehr!
-    - Dadurch bekommt jede Session eigene Bokeh-Modelle
-    - → Kein E-1027 (REPEATED_LAYOUT_CHILD)
-
-    - self._chart_pane ist die EINZIGE pn.pane.Bokeh-Instanz
+    - Wird pro Session neu erstellt (in create_main_layout())
+    - self._chart_pane ist die einzige pn.pane.Bokeh-Instanz
     - chart_area.py holt sich diese Referenz über das Property chart_pane
     - Bei Updates wird self._chart_pane.param.trigger("object") aufgerufen
     - Bei Chart-Typ-Wechsel wird self._chart_pane.object ausgetauscht
@@ -45,7 +43,7 @@ class ChartCallbackHandler:
         self._current_stream_type: str = "second"
         self._is_streaming: bool = False
         self._periodic_callback: Optional[pn.state.PeriodicCallback] = None
-        self._use_demo_data: bool = True
+        self._use_demo_data: bool = False
 
         # EINZIGES Pane — wird über chart_pane Property ins Layout gehängt
         self._chart_pane = pn.pane.Bokeh(
@@ -90,7 +88,7 @@ class ChartCallbackHandler:
     def set_chart_type(self, chart_type: str):
         """
         Setzt den Chart-Typ (Candlestick/Linie).
-        Tauscht die Figure im EINZIGEN Pane aus.
+        Tauscht die Figure im einzigen Pane aus.
         """
         self._current_chart_type = chart_type
         logger.info(f"Chart type changed to: {chart_type}")

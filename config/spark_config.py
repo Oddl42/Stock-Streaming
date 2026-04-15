@@ -60,7 +60,10 @@ class SparkConfig:
         "org.apache.spark:spark-sql-kafka-0-10_2.12:3.5.0",
         "org.postgresql:postgresql:42.7.1",
     ])
-
+    @property
+    def packages_string(self) -> str:
+        """Nicht mehr genutzt – JARs werden direkt im Docker-Image bereitgestellt."""
+        return ""
     @property
     def checkpoint_path_second(self) -> str:
         return f"{self.checkpoint_base_path}/second_aggregates"

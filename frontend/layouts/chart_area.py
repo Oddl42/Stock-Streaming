@@ -19,11 +19,6 @@ def create_chart_area(chart_handler: ChartCallbackHandler) -> pn.Column:
     Args:
         chart_handler: Die ChartCallbackHandler-Instanz für diese Session.
                        Wird in create_main_layout() erstellt und hierher übergeben.
-
-    WICHTIG:
-    - Wir verwenden chart_handler.chart_pane (das EINZIGE Pane)
-    - Kein eigenes pn.pane.Bokeh erstellen → kein E-1027!
-    - Chart-Typ-Wechsel läuft über chart_handler.set_chart_type()
     """
 
     chart_container = pn.Column(

@@ -8,6 +8,12 @@ Created on Wed Feb 25 22:35:56 2026
 
 """
 Haupt-Layout: Orchestriert alle Komponenten und Callbacks.
+
+ARCHITEKTUR:
+    - Backend (Producer, Spark) läuft extern via run_local.sh
+    - GUI startet nur das periodische Lesen aus TimescaleDB
+    - "Start" Button → startet Chart-Updates (DB-Reads)
+    - "Stop" Button → stoppt Chart-Updates
 """
 
 import panel as pn
@@ -36,9 +42,11 @@ def create_main_layout() -> dict:
     """
     Erstellt das gesamte Layout der App und verbindet alle Callbacks.
 
-    WICHTIG: Der ChartCallbackHandler wird HIER pro Session erstellt,
-    NICHT als Modul-Level Singleton. Dadurch bekommt jede Session
-    eigene Bokeh-Modelle → kein E-1027 (REPEATED_LAYOUT_CHILD).
+    Der ChartCallbackHandler wird pro Session erstellt (kein Singleton),
+    damit jede Session eigene Bokeh-Modelle bekommt.
+
+    Backend-Prozesse (Producer, Spark) werden NICHT aus der GUI
+    gestartet — sie laufen extern via run_local.sh.
 
     Returns:
         Dict mit "sidebar" und "main" Schlüsseln für das Template.
@@ -91,47 +99,72 @@ def create_main_layout() -> dict:
 
     # --- Stream Start/Stop Callbacks ---
     def on_stream_start(event):
-        """Wird aufgerufen wenn der Start-Button geklickt wird."""
+        """
+        Wird aufgerufen wenn der Start-Button geklickt wird.
+
+        1. Informiert stream_callback_handler (Logging, Health-Check)
+        2. Startet periodisches Chart-Update (liest aus TimescaleDB)
+        3. Startet periodisches Tabellen-Update
+
+        STARTET KEINE Backend-Prozesse (Producer/Spark)!
+        Die laufen extern via run_local.sh.
+        """
         tickers = ticker_selector.selected_symbols
         if not tickers:
             pn.state.notifications.error(
-                "❌ Keine Ticker ausgewählt! Bitte wähle zuerst Ticker aus.",
+                "❌ Keine Ticker ausgewählt! "
+                "Bitte wähle zuerst Ticker aus.",
                 duration=5000,
             )
             return
 
         stream_type = stream_controls.stream_type
 
-        try:
-            stream_callback_handler.on_stream_start(stream_type, tickers)
-        except Exception as e:
-            pn.state.notifications.error(
-                f"❌ Stream-Start fehlgeschlagen: {e}",
-                duration=5000,
-            )
-            return
+        # Logging + Health-Check (keine Backend-Prozesse!)
+        stream_callback_handler.on_stream_start(stream_type, tickers)
 
+        # Chart-Updates starten (liest aus DB)
         chart_handler.set_stream_type(stream_type)
         chart_handler.start_periodic_update()
+
+        # Tabellen-Updates starten
         table_handler.start_periodic_update()
 
+        pn.state.notifications.success(
+            f"✅ Chart-Updates gestartet für {len(tickers)} Ticker. "
+            f"Daten kommen vom externen Producer (run_local.sh).",
+            duration=5000,
+        )
+
         logger.info(
-            f"Streaming started: {stream_type} with {len(tickers)} tickers"
+            f"GUI updates started: {stream_type} "
+            f"with {len(tickers)} tickers"
         )
 
     def on_stream_stop(event):
-        """Wird aufgerufen wenn der Stop-Button geklickt wird."""
+        """
+        Wird aufgerufen wenn der Stop-Button geklickt wird.
+
+        Stoppt nur die GUI-Updates, NICHT die Backend-Prozesse.
+        """
         stream_type = stream_controls.stream_type
 
+        # Chart-Updates stoppen
         chart_handler.stop_periodic_update()
+
+        # Tabellen-Updates stoppen
         table_handler.stop_periodic_update()
 
-        try:
-            stream_callback_handler.on_stream_stop(stream_type)
-        except Exception as e:
-            logger.error(f"Stream stop error: {e}")
+        # Logging
+        stream_callback_handler.on_stream_stop(stream_type)
 
-        logger.info("Streaming stopped.")
+        pn.state.notifications.info(
+            "⏹️ Chart-Updates gestoppt. "
+            "Backend-Prozesse laufen weiter.",
+            duration=5000,
+        )
+
+        logger.info("GUI updates stopped.")
 
     stream_controls.param.watch(on_stream_start, "stream_started")
     stream_controls.param.watch(on_stream_stop, "stream_stopped")
@@ -139,7 +172,7 @@ def create_main_layout() -> dict:
     # --- Chart Type Callback ---
     def on_chart_type_change(event):
         """
-        Wechselt den Chart-Typ.
+        Wechselt den Chart-Typ (Candlestick ↔ Line).
         set_chart_type() tauscht intern _chart_pane.object aus.
         Da chart_area dieselbe Pane-Referenz nutzt, wird der
         Wechsel automatisch sichtbar.
@@ -150,7 +183,7 @@ def create_main_layout() -> dict:
 
     # --- Stream Type Callback ---
     def on_stream_type_change(event):
-        """Wechselt den Stream-Typ."""
+        """Wechselt den Stream-Typ (Sekunden ↔ Minuten)."""
         chart_handler.set_stream_type(event.new)
 
     stream_controls.param.watch(on_stream_type_change, "stream_type")

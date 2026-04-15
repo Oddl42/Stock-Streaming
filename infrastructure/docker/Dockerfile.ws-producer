@@ -1,5 +1,5 @@
 # ============================================================
-# WebSocket Producer: Massive.com → Kafka
+# WebSocket Producer: Massive.com â†’ Kafka
 # ============================================================
 FROM python:3.11-slim
 

@@ -5,7 +5,9 @@ Created on Wed Feb 25 22:03:59 2026
 
 @author: twi
 """
-"""Bokeh Candlestick Chart für Aktienkurse – Robuste Version (Bokeh 3.8.x)."""
+"""
+Bokeh Candlestick Chart für Aktienkurse – Robuste Version (Bokeh 3.8.x).
+"""
 
 from bokeh.plotting import figure
 from bokeh.models import (
@@ -30,7 +32,9 @@ EMPTY_DATA = {
 
 
 class CandlestickChart:
-    """Interaktiver Bokeh Candlestick Chart."""
+    """
+    Interaktiver Bokeh Candlestick Chart.
+    """
 
     def __init__(self, stream_type: str = "second"):
         self.stream_type = stream_type
@@ -72,7 +76,7 @@ class CandlestickChart:
         p.grid.grid_line_alpha = 0.3
         p.outline_line_color = None
 
-        # Datetime Formatter – Bokeh 3.8.x: Strings, KEINE Listen!
+        # Datetime Formatter
         p.xaxis.formatter = DatetimeTickFormatter(
             seconds="%H:%M:%S",
             minsec="%H:%M:%S",
@@ -145,7 +149,9 @@ class CandlestickChart:
         return p
 
     def update(self, df: pd.DataFrame, symbol: str = ""):
-        """Aktualisiert den Chart mit neuen Daten."""
+        """
+         Aktualisiert den Chart mit neuen Daten.
+         """
         if df is None or df.empty:
             self.source_inc.data = dict(EMPTY_DATA)
             self.source_dec.data = dict(EMPTY_DATA)

@@ -38,18 +38,19 @@ spec:
               memory: {{ .Values.app.panelGui.resources.limits.memory }}
               cpu: {{ .Values.app.panelGui.resources.limits.cpu }}
           livenessProbe:
-            httpGet:
-              path: /app
-              port: 5006
+            tcpSocket:
+              port: 5006               # ✅ Kein /app – nur prüfen ob Port offen ist
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 5
+            failureThreshold: 5
+          readinessProbe:
+            tcpSocket:
+              port: 5006               # ✅ Leichtgewichtig
             initialDelaySeconds: 30
             periodSeconds: 15
-            timeoutSeconds: 10
-          readinessProbe:
-            httpGet:
-              path: /app
-              port: 5006
-            initialDelaySeconds: 15
-            periodSeconds: 5
+            timeoutSeconds: 5
+            failureThreshold: 3
 ---
 apiVersion: v1
 kind: Service

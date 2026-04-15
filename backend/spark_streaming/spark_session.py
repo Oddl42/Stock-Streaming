@@ -57,10 +57,11 @@ class SparkSessionFactory:
             .master(spark_config.master)
 
             # --- Packages ---
-            .config(
-                "spark.jars.packages",
-                spark_config.packages_string,
-            )
+            #.config(
+            #    "spark.jars.packages",
+            #    spark_config.packages_string,
+            #)
+            .config("spark.jars.ivy", "/tmp/.ivy2")
 
             # --- Streaming ---
             .config(

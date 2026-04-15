@@ -54,6 +54,16 @@ kafka:
       partitions: 4
       replicas: 1
       retention: 172800000
+  ui:
+    enabled: true
+    nodePort: 30008
+    resources:
+      requests:
+        memory: "256Mi"
+        cpu: "100m"
+      limits:
+        memory: "512Mi"
+        cpu: "300m"    
 
 # ============================================================
 # TimescaleDB
